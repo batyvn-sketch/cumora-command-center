@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cumora 指挥中心</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23070b14'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%233ec6d6' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%233ec6d6'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#070b14; --bg2:#0b1220; --panel:rgba(13,22,38,.72);
+  --line:rgba(94,146,214,.16); --grid:rgba(64,140,220,.07);
+  --cyan:#3ec6d6; --cyan-dim:#24556b; --amber:#ffb84d; --red:#ff5c5c;
+  --text:#c9d7ea; --dim:#5d7089; --mono:"SF Mono","JetBrains Mono","Menlo",monospace;
+  --sans:"PingFang SC","Helvetica Neue",system-ui,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:radial-gradient(1200px 600px at 20% -10%,#101a30 0%,var(--bg) 55%) var(--bg);
+  color:var(--text); font-family:var(--sans); overflow:hidden;
+}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:44px 44px;mask-image:radial-gradient(90% 80% at 50% 30%,#000 30%,transparent 100%);}
+#app{position:relative;z-index:1;height:100vh;display:flex;flex-direction:column}
+/* ===== 顶栏 ===== */
+header{flex:none;display:flex;align-items:center;gap:18px;padding:12px 20px;
+  border-bottom:1px solid var(--line);background:var(--panel);backdrop-filter:blur(6px)}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.brand .logo{width:30px;height:30px;flex:none}
+.brand h1{font-size:15px;font-weight:600;letter-spacing:.06em;color:#e6eefc;white-space:nowrap}
+.brand p{font-size:10px;color:var(--dim);font-family:var(--mono);margin-top:2px;letter-spacing:.05em}
+.metrics{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.metric{display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--line);
+  border-radius:999px;font-size:11px;color:var(--dim);background:rgba(64,140,220,.05);white-space:nowrap}
+.metric b{font-family:var(--mono);font-size:13px;color:var(--text);font-weight:600}
+.metric .dot{width:6px;height:6px;border-radius:50%}
+.metric .dot.ok{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.metric .dot.warn{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+.metric .dot.err{background:var(--red);box-shadow:0 0 8px var(--red)}
+.controls{display:flex;align-items:center;gap:8px;margin-left:4px;flex:none}
+.btn{display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--line);
+  border-radius:8px;background:rgba(64,140,220,.08);color:var(--text);font-size:12px;cursor:pointer;
+  font-family:var(--sans);transition:border-color .15s,background .15s}
+.btn:hover{border-color:var(--cyan);background:rgba(62,198,214,.12)}
+.btn:active{transform:translateY(1px)}
+.btn .ic{width:14px;height:14px;fill:currentColor}
+.speed{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.speed button{border:none;background:transparent;color:var(--dim);padding:6px 9px;font-size:11px;
+  font-family:var(--mono);cursor:pointer}
+.speed button.on{background:rgba(62,198,214,.16);color:var(--cyan)}
+.timer{font-family:var(--mono);font-size:12px;color:var(--dim);min-width:118px;text-align:right}
+.timer b{color:var(--cyan)}
+/* ===== 主区 ===== */
+main{flex:1;position:relative;min-height:0}
+#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.alertbar{position:absolute;top:14px;left:50%;transform:translateX(-50%);padding:7px 18px;border-radius:999px;
+  background:rgba(255,92,92,.12);border:1px solid rgba(255,92,92,.4);color:#ff9a9a;font-size:12px;
+  opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;font-family:var(--mono)}
+.alertbar.show{opacity:1}
+.clock{position:absolute;top:14px;right:18px;text-align:right;pointer-events:none}
+.clock .t{font-family:var(--mono);font-size:22px;color:#e6eefc;font-weight:600}
+.clock .d{font-size:10px;color:var(--dim);margin-top:2px;letter-spacing:.12em}
+#tooltip{position:absolute;z-index:5;pointer-events:none;opacity:0;transition:opacity .12s;
+  background:rgba(10,18,34,.94);border:1px solid var(--line);border-radius:10px;padding:10px 13px;
+  min-width:180px;box-shadow:0 12px 32px rgba(0,0,0,.5)}
+#tooltip.show{opacity:1}
+#tooltip .n{font-size:13px;font-weight:600;color:#e6eefc}
+#tooltip .r{font-size:10px;color:var(--dim);margin:3px 0 7px;font-family:var(--mono)}
+#tooltip .row{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);padding:2px 0}
+#tooltip .row b{color:var(--text);font-family:var(--mono);font-weight:600}
+/* ===== 进度条 ===== */
+.progressbar{flex:none;display:flex;align-items:center;gap:12px;padding:7px 20px;
+  border-top:1px solid var(--line);background:var(--panel)}
+.progressbar .label{font-size:10px;color:var(--dim);font-family:var(--mono);flex:none}
+.progressbar .label b{color:var(--cyan);font-weight:600}
+#seek{flex:1;-webkit-appearance:none;appearance:none;height:3px;border-radius:2px;
+  background:linear-gradient(90deg,var(--cyan) var(--p,0%),rgba(94,146,214,.18) var(--p,0%));cursor:pointer}
+#seek::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;
+  background:var(--cyan);box-shadow:0 0 8px var(--cyan);border:none}
+#seek::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--cyan);border:none}
+/* ===== 事件流 ===== */
+#feed{flex:none;height:168px;display:flex;flex-direction:column;border-top:1px solid var(--line);
+  background:rgba(7,12,22,.88)}
+#feed .fh{flex:none;display:flex;align-items:center;gap:8px;padding:5px 16px;font-size:10px;
+  color:var(--dim);letter-spacing:.12em;border-bottom:1px solid rgba(94,146,214,.08)}
+#feed .fh .live{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan);
+  animation:blink 1.6s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+#feed ul{flex:1;overflow:hidden;list-style:none;padding:0;position:relative}
+#feed li{display:flex;align-items:baseline;gap:10px;padding:2px 16px;font-size:11px;
+  font-family:var(--mono);color:var(--dim);animation:rowin .18s ease-out}
+@keyframes rowin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+#feed li .tm{flex:none;color:#31475f;font-size:10px}
+#feed li .ag{flex:none;font-weight:600;color:var(--cyan);width:52px}
+#feed li .ev{flex:none;padding:0 6px;border-radius:4px;font-size:10px;width:64px;text-align:center}
+#feed li .ev.turn_start{color:var(--cyan);background:rgba(62,198,214,.1)}
+#feed li .ev.turn_done{color:#7fd8a0;background:rgba(127,216,160,.08)}
+#feed li .ev.error,#feed li .ev.rate_limit{color:#ff9a9a;background:rgba(255,92,92,.12)}
+#feed li .ev.text{color:var(--dim);background:rgba(94,146,214,.06)}
+#feed li .ev.wake{color:var(--amber);background:rgba(255,184,77,.08)}
+#feed li .ms{color:#8fa3bf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:52vw}
+#feed li .ms:empty{display:none}
+/* ===== token 用量 ===== */
+#tokenbar{flex:none;padding:8px 20px 7px;border-top:1px solid var(--line);background:rgba(9,16,30,.9)}
+.tk-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px}
+.tk-head .l{font-size:10px;color:var(--dim);letter-spacing:.14em}
+.tk-head .r{font-size:10px;font-family:var(--mono);color:var(--dim)}
+.tk-head .r b{color:var(--cyan);font-weight:600}
+.tk-head .r em{font-style:normal;color:#66d9a8}
+.tk-row{display:flex;gap:9px;flex-wrap:wrap}
+.tk-cell{flex:1 1 118px;min-width:0}
+.tk-name{display:flex;justify-content:space-between;align-items:baseline;font-size:10px;
+  font-family:var(--mono);color:#8fb0cf;gap:4px}
+.tk-name b{color:var(--cyan);font-weight:600;font-size:10px}
+.tk-bar{position:relative;display:flex;height:6px;border-radius:3px;background:rgba(64,140,220,.1);margin-top:3px;overflow:hidden}
+.tk-in{position:absolute;left:0;top:0;bottom:0;background:rgba(62,198,214,.4)}
+.tk-out{position:absolute;left:0;top:0;bottom:0;background:#66d9a8}
+.tk-cell[data-zero="1"] .tk-name{opacity:.45}
+/* 窄屏 */
+@media (max-width:720px){
+  header{flex-wrap:wrap;gap:10px;padding:10px 12px}
+  .metrics{margin-left:0;order:3;width:100%}
+  .controls{order:2}
+  .brand p{display:none}
+  .timer{min-width:0}
+  #feed{height:150px}
+  #feed li .ms{max-width:34vw}
+  #tokenbar{padding:7px 12px}
+  .tk-cell{flex:1 1 76px}
+  .tk-name b{font-size:9px}
+}
+@media (prefers-reduced-motion:reduce){
+  #feed .fh .live{animation:none}
+  #feed li{animation:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32"><circle cx="16" cy="16" r="8" fill="none" stroke="#3ec6d6" stroke-width="2"/><circle cx="16" cy="16" r="2.5" fill="#3ec6d6"/><circle cx="16" cy="9" r="1.6" fill="#ffb84d"/></svg>
+      <div>
+        <h1>CUMORA 指挥中心</h1>
+        <p>AGENT ORCHESTRATION // daemon.log 回放</p>
+      </div>
+    </div>
+    <div class="metrics" id="metrics"></div>
+    <div class="controls">
+      <button class="btn" id="btnPlay" title="播放 / 暂停">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>播放
+      </button>
+      <div class="speed" id="speed">
+        <button data-s="1" class="on">1x</button>
+        <button data-s="4">4x</button>
+        <button data-s="16">16x</button>
+      </div>
+      <div class="timer"><b id="curT">--:--:--</b> / <span id="endT">--:--:--</span></div>
+    </div>
+  </header>
+
+  <main>
+    <canvas id="scene"></canvas>
+    <div class="alertbar" id="alertbar"></div>
+    <div class="clock"><div class="t" id="bigT">--:--:--</div><div class="d" id="bigD">UTC+8 · LIVE REPLAY</div></div>
+    <div id="tooltip"></div>
+  </main>
+
+  <div class="progressbar">
+    <span class="label">进度 <b id="pct">0%</b></span>
+    <input type="range" id="seek" min="0" max="1000" value="0">
+  </div>
+
+  <div id="tokenbar">
+    <div class="tk-head">
+      <span class="l">TOKEN 用量 · daemon.log 全量累计</span>
+      <span class="r">输入 <b id="tkIn">0</b> · 输出 <em id="tkOut">0</em> · <span id="tkSteps">0</span> 步</span>
+    </div>
+    <div class="tk-row" id="tkRow"></div>
+  </div>
+
+  <section id="feed">
+    <div class="fh"><span class="live"></span>事件流 EVENT STREAM</div>
+    <ul id="feedList"></ul>
+  </section>
+</div>
+
+<script>
+"use strict";
+/* ================= 数据 ================= */
+const RAW_EVENTS = [["05:19:55", "nina", "text", ""], ["05:20:06", "nina", "text", ""], ["05:20:15", "atlas", "busy", ""], ["05:20:15", "nova", "busy", ""], ["05:20:26", "atlas", "text", ""], ["05:20:29", "nina", "text", ""], ["05:20:32", "iris", "busy", ""], ["05:20:32", "nina", "busy", ""], ["05:20:32", "nova", "busy", ""], ["05:20:32", "atlas", "busy", ""], ["05:20:34", "iris", "turn_start", ""], ["05:20:38", "nina", "text", ""], ["05:20:47", "iris", "text", ""], ["05:20:48", "nina", "text", ""], ["05:20:49", "nova", "turn_start", ""], ["05:20:51", "nina", "turn_done", ""], ["05:20:52", "nina", "turn_start", ""], ["05:21:06", "iris", "text", ""], ["05:21:08", "nina", "text", ""], ["05:21:14", "atlas", "text", ""], ["05:21:19", "nina", "text", ""], ["05:21:21", "iris", "text", ""], ["05:21:28", "iris", "text", ""], ["05:21:30", "iris", "turn_done", ""], ["05:21:31", "nina", "text", ""], ["05:21:32", "atlas", "busy", ""], ["05:21:32", "nova", "busy", ""], ["05:21:33", "atlas", "busy", ""], ["05:21:33", "nina", "busy", ""], ["05:21:33", "nova", "busy", ""], ["05:21:36", "iris", "turn_start", ""], ["05:21:48", "nina", "text", ""], ["05:21:58", "iris", "text", ""], ["05:22:00", "atlas", "text", ""], ["05:22:03", "atlas", "busy", ""], ["05:22:03", "iris", "busy", ""], ["05:22:03", "nina", "busy", ""], ["05:22:04", "iris", "text", ""], ["05:22:06", "nina", "text", ""], ["05:22:06", "iris", "turn_done", ""], ["05:22:21", "nova", "text", ""], ["05:22:25", "nina", "text", ""], ["05:22:25", "nova", "turn_done", ""], ["05:22:27", "iris", "turn_start", ""], ["05:22:30", "atlas", "text", ""], ["05:22:33", "nina", "text", ""], ["05:22:35", "nina", "turn_done", ""], ["05:23:09", "iris", "text", ""], ["05:23:10", "atlas", "text", ""], ["05:23:13", "atlas", "busy", ""], ["05:23:22", "iris", "text", ""], ["05:23:31", "nova", "turn_start", ""], ["05:23:33", "nina", "turn_start", ""], ["05:23:34", "iris", "text", ""], ["05:23:36", "iris", "turn_done", ""], ["05:23:40", "atlas", "text", ""], ["05:23:54", "nina", "text", ""], ["05:24:02", "atlas", "text", ""], ["05:24:04", "atlas", "turn_done", ""], ["05:24:05", "atlas", "turn_start", ""], ["05:24:13", "nova", "text", ""], ["05:24:19", "nina", "text", ""], ["05:24:26", "atlas", "busy", ""], ["05:24:26", "nova", "busy", ""], ["05:24:36", "nina", "text", ""], ["05:24:49", "iris", "turn_start", ""], ["05:24:50", "nina", "text", ""], ["05:25:02", "nova", "text", ""], ["05:25:09", "nina", "text", ""], ["05:25:11", "atlas", "text", ""], ["05:25:18", "nina", "text", ""], ["05:25:28", "nina", "text", ""], ["05:25:31", "nina", "turn_done", ""], ["05:25:38", "iris", "busy", ""], ["05:25:38", "atlas", "busy", ""], ["05:25:46", "iris", "text", ""], ["05:25:51", "nova", "text", ""], ["05:25:54", "nova", "turn_done", ""], ["05:26:12", "iris", "text", ""], ["05:26:20", "iris", "text", ""], ["05:26:30", "iris", "text", ""], ["05:26:53", "iris", "text", ""], ["05:26:53", "atlas", "busy", ""], ["05:27:01", "iris", "text", ""], ["05:27:05", "atlas", "text", ""], ["05:27:08", "iris", "text", ""], ["05:27:10", "iris", "turn_done", ""], ["05:27:14", "nova", "turn_start", ""], ["05:27:27", "nina", "rate_limit", ""], ["05:27:27", "nina", "rate_limit", ""], ["05:27:46", "atlas", "text", ""], ["05:28:18", "atlas", "text", ""], ["05:28:35", "atlas", "busy", ""], ["05:28:49", "nina", "turn_start", ""], ["05:28:49", "iris", "turn_start", ""], ["05:29:07", "atlas", "text", ""], ["05:29:08", "nova", "text", ""], ["05:29:11", "nova", "turn_done", ""], ["05:29:11", "atlas", "turn_done", ""], ["05:29:23", "nina", "text", ""], ["05:29:24", "iris", "text", ""], ["05:29:30", "atlas", "busy", ""], ["05:29:30", "nina", "busy", ""], ["05:29:30", "atlas", "rerun", ""], ["05:29:36", "iris", "text", ""], ["05:29:41", "nina", "text", ""], ["05:29:42", "iris", "text", ""], ["05:29:44", "iris", "turn_done", ""], ["05:29:57", "atlas", "turn_start", ""], ["05:29:58", "nina", "text", ""], ["05:29:59", "nova", "turn_start", ""], ["05:30:05", "atlas", "busy", ""], ["05:30:05", "nova", "busy", ""], ["05:30:14", "nina", "text", ""], ["05:30:23", "nina", "text", ""], ["05:30:34", "nina", "text", ""], ["05:30:39", "iris", "rate_limit", ""], ["05:30:39", "iris", "rate_limit", ""], ["05:30:51", "nina", "text", ""], ["05:31:01", "nina", "text", ""], ["05:31:05", "nina", "turn_done", ""], ["05:31:10", "atlas", "busy", ""], ["05:31:32", "iris", "turn_start", ""], ["05:31:36", "atlas", "text", ""], ["05:31:39", "nova", "text", ""], ["05:31:42", "nina", "turn_start", ""], ["05:31:42", "nova", "turn_done", ""], ["05:32:22", "nina", "text", ""], ["05:32:24", "iris", "text", ""], ["05:32:29", "atlas", "busy", ""], ["05:32:29", "nina", "busy", ""], ["05:32:37", "iris", "text", ""], ["05:32:38", "nina", "text", ""], ["05:32:43", "iris", "text", ""], ["05:32:45", "iris", "turn_done", ""], ["05:33:02", "nina", "text", ""], ["05:33:11", "atlas", "busy", ""], ["05:33:24", "nina", "text", ""], ["05:33:24", "atlas", "text", ""], ["05:33:35", "nina", "text", ""], ["05:33:40", "nina", "turn_done", ""], ["05:34:06", "atlas", "text", ""], ["05:35:16", "atlas", "text", ""], ["05:36:36", "atlas", "text", ""], ["05:36:50", "atlas", "text", ""], ["05:36:53", "atlas", "turn_done", ""], ["05:48:36", "bram", "wake", ""], ["05:48:38", "atlas", "wake", ""], ["05:48:38", "atlas", "busy", ""], ["05:49:38", "iris", "wake", ""], ["05:49:38", "nina", "wake", ""], ["05:49:41", "nova", "wake", ""], ["05:50:29", "nina", "turn_start", ""], ["05:50:34", "peta", "wake", ""], ["05:50:56", "nina", "text", ""], ["05:51:32", "sage", "wake", ""], ["05:51:41", "nina", "text", ""], ["05:51:53", "nina", "text", ""], ["05:52:05", "nina", "text", ""], ["05:52:24", "nina", "text", ""], ["05:53:47", "nina", "text", ""], ["05:55:05", "nina", "text", ""], ["05:56:00", "nina", "text", ""], ["05:56:23", "nina", "text", ""], ["05:56:34", "nina", "text", ""], ["05:56:43", "nina", "text", ""], ["05:57:54", "nina", "text", ""], ["05:58:05", "atlas", "busy", ""], ["05:58:12", "nina", "text", ""], ["05:58:18", "nina", "text", ""], ["05:58:21", "nina", "turn_done", ""], ["06:00:25", "nova", "busy", ""], ["06:00:32", "nova", "turn_start", ""], ["06:00:55", "nova", "text", ""], ["06:01:57", "nova", "text", ""], ["06:02:00", "nova", "turn_done", ""], ["06:05:32", "nova", "turn_start", ""], ["06:07:53", "nova", "text", ""], ["06:07:55", "nova", "turn_done", ""], ["06:20:28", "nina", "turn_start", ""], ["06:20:47", "nina", "text", ""], ["06:20:58", "nina", "text", ""], ["06:21:15", "nina", "text", ""], ["06:21:26", "nina", "text", ""], ["06:21:35", "nina", "text", ""], ["06:21:50", "nina", "text", ""], ["06:21:58", "nina", "text", ""], ["06:22:12", "nina", "text", ""], ["06:22:26", "nina", "text", ""], ["06:22:39", "nina", "text", ""], ["06:22:43", "nina", "turn_done", ""], ["06:29:29", "nova", "turn_start", ""], ["06:32:28", "nova", "text", ""], ["06:32:30", "nova", "turn_done", ""], ["06:39:09", "nina", "turn_start", ""], ["06:39:22", "nina", "text", ""], ["06:39:33", "nina", "text", ""], ["06:39:40", "nina", "text", ""], ["06:39:48", "nina", "text", ""], ["06:39:56", "nina", "text", ""], ["06:40:08", "nina", "text", ""], ["06:40:15", "nina", "text", ""], ["06:40:29", "nina", "text", ""], ["06:40:43", "nina", "text", ""], ["06:40:51", "nina", "text", ""], ["06:40:55", "nina", "turn_done", ""], ["06:47:51", "nova", "turn_start", ""], ["06:48:38", "bram", "wake", ""], ["06:48:39", "atlas", "wake", ""], ["06:48:45", "atlas", "busy", ""], ["06:49:26", "nova", "text", ""], ["06:49:29", "nova", "turn_done", ""], ["06:49:39", "iris", "wake", ""], ["06:49:40", "nina", "wake", ""], ["06:49:43", "nova", "wake", ""], ["06:50:37", "peta", "wake", ""], ["06:51:37", "sage", "wake", ""], ["07:07:40", "atlas", "busy", ""], ["07:07:44", "nina", "turn_start", ""], ["07:07:44", "nova", "turn_start", ""], ["07:07:44", "iris", "turn_start", ""], ["07:07:50", "atlas", "turn_start", ""], ["07:07:57", "nina", "text", ""], ["07:08:03", "iris", "text", ""], ["07:08:08", "nina", "text", ""], ["07:08:09", "iris", "busy", ""], ["07:08:09", "nova", "busy", ""], ["07:08:09", "atlas", "busy", ""], ["07:08:16", "nina", "text", ""], ["07:08:21", "iris", "text", ""], ["07:08:28", "nina", "text", ""], ["07:08:30", "iris", "text", ""], ["07:08:37", "iris", "text", ""], ["07:08:39", "iris", "turn_done", ""], ["07:08:42", "nina", "text", ""], ["07:08:46", "nina", "turn_done", ""], ["07:09:11", "iris", "rate_limit", ""], ["07:09:11", "iris", "rate_limit", ""], ["07:09:16", "atlas", "text", ""], ["07:09:22", "nova", "text", ""], ["07:09:25", "nova", "turn_done", ""], ["07:09:51", "nova", "turn_start", ""], ["07:10:08", "atlas", "text", ""], ["07:10:14", "atlas", "busy", ""], ["07:10:25", "nova", "busy", ""], ["07:10:25", "nina", "busy", ""], ["07:10:28", "nova", "text", ""], ["07:10:31", "nova", "turn_done", ""], ["07:10:32", "nova", "turn_start", ""], ["07:10:36", "nina", "turn_start", ""], ["07:10:37", "iris", "busy", ""], ["07:10:37", "nova", "busy", ""], ["07:10:37", "atlas", "busy", ""], ["07:10:37", "nina", "busy", ""], ["07:11:00", "nina", "text", ""], ["07:11:00", "nova", "busy", ""], ["07:11:00", "iris", "busy", ""], ["07:11:00", "atlas", "busy", ""], ["07:11:03", "iris", "turn_start", ""], ["07:11:08", "nina", "text", ""], ["07:11:12", "atlas", "text", ""], ["07:11:20", "iris", "text", ""], ["07:11:20", "nina", "text", ""], ["07:11:25", "iris", "text", ""], ["07:11:28", "iris", "turn_done", ""], ["07:11:28", "nina", "text", ""], ["07:11:35", "atlas", "text", ""], ["07:11:36", "nina", "busy", ""], ["07:11:38", "nina", "text", ""], ["07:11:38", "atlas", "turn_done", ""], ["07:11:39", "atlas", "turn_start", ""], ["07:11:50", "nina", "text", ""], ["07:11:51", "nova", "text", ""], ["07:11:54", "nova", "turn_done", ""], ["07:11:58", "nina", "text", ""], ["07:12:11", "nina", "text", ""], ["07:12:20", "nina", "text", ""], ["07:12:21", "nova", "turn_start", ""], ["07:12:31", "atlas", "text", ""], ["07:12:34", "nina", "text", ""], ["07:12:36", "atlas", "turn_done", ""], ["07:12:42", "nova", "text", ""], ["07:12:43", "nina", "text", ""], ["07:12:46", "nova", "turn_done", ""], ["07:12:59", "nina", "text", ""], ["07:13:15", "nina", "text", ""], ["07:13:20", "nina", "turn_done", ""], ["07:13:21", "nina", "turn_start", ""], ["07:13:30", "iris", "wake", ""], ["07:13:39", "nina", "text", ""], ["07:13:44", "nova", "turn_start", ""], ["07:13:52", "nina", "text", ""], ["07:14:10", "nina", "text", ""], ["07:14:22", "nina", "text", ""], ["07:14:26", "nova", "text", ""], ["07:14:29", "nova", "turn_done", ""], ["07:14:32", "nina", "text", ""], ["07:15:42", "nina", "text", ""], ["07:16:31", "nina", "text", ""], ["07:16:40", "nina", "text", ""], ["07:16:54", "nina", "text", ""], ["07:17:00", "nina", "turn_done", ""], ["07:17:21", "nova", "rate_limit", ""], ["07:17:21", "nova", "rate_limit", ""], ["07:19:28", "nova", "rate_limit", ""], ["07:19:28", "nova", "rate_limit", ""], ["07:21:46", "nova", "rate_limit", ""], ["07:21:46", "nova", "rate_limit", ""]];
+
+const AGENTS = [
+  {id:"nina", role:"EDA 硬件 · 嘉立创 MCP"},
+  {id:"nova", role:"产品经理"},
+  {id:"iris", role:"视觉设计"},
+  {id:"atlas", role:"技术研究"},
+  {id:"sage", role:"QA 校验"},
+  {id:"bram", role:"宿主 / 编排"},
+  {id:"peta", role:"调度"},
+  {id:"muse", role:"内容创作"},
+  {id:"a8k",  role:"通用"}
+];
+
+/* token 用量：daemon.log 全量 step-finish 累计（input 含上下文重传） */
+const TOKENS = {
+  "nina":  {i:22368523, o:653034,  r:176933, steps:868},
+  "nova":  {i:58266606, o:2076579, r:74611,  steps:1858},
+  "iris":  {i:31460849, o:1036297, r:0,      steps:752},
+  "atlas": {i:29636160, o:1736786, r:122862, steps:1053},
+  "sage":  {i:26859021, o:1778357, r:88211,  steps:1200},
+  "bram":  {i:36887175, o:2344016, r:242142, steps:1812},
+  "peta":  {i:25373309, o:1466892, r:42524,  steps:988},
+  "muse":  {i:5785036,  o:250445,  r:0,      steps:182},
+  "a8k":   {i:0, o:0, r:0, steps:0}
+};
+const TOK_TOTAL = {i:236636679, o:11342406, r:747283, steps:8713};
+function fmtTok(n){
+  if(n>=1e6) return (n/1e6).toFixed(1).replace(/\.0$/,"")+"M";
+  if(n>=1e3) return (n/1e3).toFixed(1).replace(/\.0$/,"")+"K";
+  return String(n);
+}
+
+const EV_META = {
+  turn_start:  "TURN 开始", turn_done: "TURN 完成", text: "消息",
+  error: "错误", rate_limit: "限流退避", busy: "合流", rerun: "重跑",
+  wake: "唤醒", config: "配置变更"
+};
+const EV_BAD = {error:1, rate_limit:1};
+
+/* ================= 状态 ================= */
+const evs = (RAW_EVENTS || []).map(function(r){
+  return {t:r[0], a:r[1], e:r[2], m:r[3]||""};
+});
+const timeToSec = function(hm){ const p=hm.split(":"); return (+p[0])*3600 + (+p[1])*60 + (+p[2]); };
+const t0 = evs.length ? timeToSec(evs[0].t) : 0;
+const t1 = evs.length ? timeToSec(evs[evs.length-1].t) : 0;
+const TOT = Math.max(1, t1 - t0);
+const fmtHM = function(sec){
+  let s = Math.max(0, Math.floor(sec)); const h=String(Math.floor(s/3600)).padStart(2,"0");
+  const m=String(Math.floor(s%3600/60)).padStart(2,"0"); const ss=String(s%60).padStart(2,"0");
+  return h+":"+m+":"+ss;
+};
+
+/* agent 统计 */
+const stats = {};
+evs.forEach(function(ev){ const s = stats[ev.a] || (stats[ev.a]={turn:0,text:0,bad:0,last:ev.t,types:{}});
+  s.last = ev.t; s.types[ev.e]=(s.types[ev.e]||0)+1;
+  if(ev.e==="turn_start"||ev.e==="turn_done") s.turn++;
+  if(ev.e==="text") s.text++;
+  if(EV_BAD[ev.e]) s.bad++;
+});
+const METRICS = [
+  ["在线", evs.length? Math.min(9,9):0, "ok"],
+  ["TURN", evs.filter(function(e){return e.e==="turn_done"}).length, "ok"],
+  ["消息", evs.filter(function(e){return e.e==="text"}).length, ""],
+  ["限流", evs.filter(function(e){return e.e==="rate_limit"}).length, "warn"],
+  ["错误", evs.filter(function(e){return e.e==="error"}).length, "err"],
+  ["Token IN", fmtTok(TOK_TOTAL.i), ""],
+  ["Token OUT", fmtTok(TOK_TOTAL.o), ""]
+];
+
+/* ================= DOM ================= */
+const $ = function(id){ return document.getElementById(id); };
+const scene = $("scene"), ctx = scene.getContext("2d");
+const feedList = $("feedList"), tooltip = $("tooltip");
+const seek = $("seek"), alertbar = $("alertbar");
+const metricsBox = $("metrics"), bigT = $("bigT"), bigD = $("bigD");
+const curT = $("curT"), endT = $("endT"), pct = $("pct");
+
+/* ================= 布局 ================= */
+let W=0, H=0, nodes=[], DPR=1;
+function layout(){
+  DPR = Math.max(1, window.devicePixelRatio||1);
+  W = scene.clientWidth; H = scene.clientHeight;
+  scene.width = W*DPR; scene.height = H*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const cx=W/2, cy=H*0.46;
+  const R = Math.min(W,H) * (W<720 ? 0.32 : 0.36);
+  const list = AGENTS.map(function(a,i){
+    const ang = -Math.PI/2 + (i/AGENTS.length)*Math.PI*2;
+    return {x:cx+Math.cos(ang)*R, y:cy+Math.sin(ang)*R, id:a.id, role:a.role, r:0,
+            act:0, glow:0, errT:0, pulse:0};
+  });
+  // 事件里出现的 agent 排前排
+  nodes = list;
+}
+
+/* ================= 粒子背景 ================= */
+const parts = [];
+function initParts(){
+  parts.length = 0;
+  const n = W<720 ? 40 : 90;
+  for(let i=0;i<n;i++){ parts.push({x:Math.random()*W, y:Math.random()*H,
+    vx:(Math.random()-.5)*.22, vy:(Math.random()-.5)*.22, r:Math.random()*1.4+.4}); }
+}
+
+/* ================= 飞线 ================= */
+const rays = [];
+function spawnRay(a, b){
+  const A=nodes.find(function(n){return n.id===a}), B=nodes.find(function(n){return n.id===b});
+  if(!A||!B) return;
+  rays.push({ax:A.x, ay:A.y, bx:B.x, by:B.y, t:0, life:1});
+}
+
+/* ================= 回放 ================= */
+let playing=true, speed=1, pos=0;   // pos: 秒（相对 t0）
+let idx=0, lastAgent=null, frameClock=0, feedCount=0;
+const ACTIVE_WIN=18, FEED_MAX=80;
+
+function tick(now){
+  if(playing){
+    pos += (now-frameClock)/1000 * speed;
+    if(pos>=TOT){ pos=TOT; playing=false; $("btnPlay").innerHTML = '<svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>重播'; }
+  }
+  frameClock = now;
+  playEvents();
+  draw(now);
+  updateUI();
+  requestAnimationFrame(tick);
+}
+function playEvents(){
+  while(idx < evs.length){
+    const ev = evs[idx];
+    if(timeToSec(ev.t)-t0 > pos) break;
+    idx++;
+    const n = nodes.find(function(x){return x.id===ev.a});
+    if(n){
+      n.act = 1; n.pulse = 1;
+      if(EV_BAD[ev.e]){ n.errT = 1.2; if(ev.e==="error"){ alertbar.textContent = "⚠ "+ev.a.toUpperCase()+" 出错 — "+EV_META[ev.e]; alertbar.classList.add("show"); setTimeout(function(){alertbar.classList.remove("show")},2600); } }
+      if(lastAgent && lastAgent!==ev.a) spawnRay(lastAgent, ev.a);
+      lastAgent = ev.a;
+    }
+    pushFeed(ev);
+  }
+}
+function pushFeed(ev){
+  const li=document.createElement("li");
+  const tm=document.createElement("span"); tm.className="tm"; tm.textContent=ev.t;
+  const ag=document.createElement("span"); ag.className="ag"; ag.textContent=ev.a;
+  const e2=document.createElement("span"); e2.className="ev "+ev.e; e2.textContent=EV_META[ev.e]||ev.e;
+  const ms=document.createElement("span"); ms.className="ms"; ms.textContent=ev.m;
+  li.appendChild(tm); li.appendChild(ag); li.appendChild(e2); li.appendChild(ms);
+  feedList.insertBefore(li, feedList.firstChild);
+  while(feedList.children.length>FEED_MAX) feedList.lastChild.remove();
+}
+
+/* ================= 绘制 ================= */
+function draw(now){
+  ctx.clearRect(0,0,W,H);
+  drawParts();
+  // 连线：活动节点 → 中心
+  ctx.lineWidth=1;
+  nodes.forEach(function(n){
+    if(n.act<=0.02) return;
+    const g=n.act*.5;
+    ctx.strokeStyle="rgba(62,198,214,"+(g*.22).toFixed(3)+")";
+    ctx.beginPath(); ctx.moveTo(n.x,n.y); ctx.lineTo(W/2,H*0.46); ctx.stroke();
+  });
+  // 飞线
+  for(let i=rays.length-1;i>=0;i--){
+    const r=rays[i]; r.t+=.06*speed; r.life-=.02;
+    if(r.life<=0){ rays.splice(i,1); continue; }
+    const p=r.t>1?1:r.t, e=p*p*(3-2*p);
+    const mx=(r.ax+r.bx)/2+(r.by-r.ay)*.18, my=(r.ay+r.by)/2+(r.bx-r.ax)*.18;
+    const x=(1-e)*(1-e)*r.ax+2*(1-e)*e*mx+e*e*r.bx;
+    const y=(1-e)*(1-e)*r.ay+2*(1-e)*e*my+e*e*r.by;
+    ctx.strokeStyle="rgba(62,198,214,"+(0.5*(1-p)).toFixed(3)+")";
+    ctx.beginPath(); ctx.moveTo(r.ax,r.ay); ctx.quadraticCurveTo(mx,my,r.bx,r.by); ctx.stroke();
+    ctx.fillStyle="rgba(120,230,240,.9)"; ctx.beginPath(); ctx.arc(x,y,1.8,0,6.283); ctx.fill();
+  }
+  // 节点
+  nodes.forEach(function(n){
+    const act=n.act; n.act=Math.max(0,n.act-.012*speed); n.pulse=Math.max(0,n.pulse-.04*speed);
+    if(n.errT>0) n.errT-=.02*speed;
+    const base = n.id==="nina" ? 1.12 : 1;
+    const rr = (n.id==="nina"? 27:23) * base * (0.9+ n.pulse*.5);
+    const cc = n.errT>0 ? "#ff5c5c" : (act>0.08 ? "#3ec6d6" : "#1d3a52");
+    // 外晕
+    if(act>0.05 || n.errT>0){
+      const rad = rr + (1-act)*14 + (n.errT>0? 6:0);
+      const g=ctx.createRadialGradient(n.x,n.y,rr*.5,n.x,n.y,rad);
+      const col = n.errT>0 ? "255,92,92" : "62,198,214";
+      g.addColorStop(0,"rgba("+col+","+(0.34*(act+0.15)).toFixed(3)+")");
+      g.addColorStop(1,"rgba("+col+",0)");
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(n.x,n.y,rad,0,6.283); ctx.fill();
+    }
+    // 圆
+    ctx.beginPath(); ctx.arc(n.x,n.y,rr,0,6.283);
+    ctx.fillStyle="rgba(9,16,30,.92)"; ctx.fill();
+    ctx.strokeStyle=cc; ctx.lineWidth= n.errT>0? 2.2:1.4; ctx.stroke();
+    // 内芯
+    ctx.beginPath(); ctx.arc(n.x,n.y,rr*.28,0,6.283);
+    ctx.fillStyle=cc; ctx.fill();
+    // 文字
+    ctx.textAlign="center";
+    ctx.font="600 12px 'SF Mono',Menlo,monospace";
+    ctx.fillStyle = act>0.08 ? "#eaf6ff" : "#8fb0cf";
+    ctx.fillText(n.id.toUpperCase(), n.x, n.y+rr+14);
+    ctx.font="9px 'PingFang SC',sans-serif";
+    ctx.fillStyle="rgba(140,160,190,.75)";
+    ctx.fillText(n.role, n.x, n.y+rr+27);
+    // 状态点
+    if(act>0.05){
+      ctx.fillStyle="#7fffb0";
+      ctx.beginPath(); ctx.arc(n.x+rr+4, n.y-rr+3, 2.4, 0, 6.283); ctx.fill();
+    }
+  });
+}
+function drawParts(){
+  ctx.fillStyle="rgba(120,170,220,.5)";
+  parts.forEach(function(p){
+    p.x+=p.vx; p.y+=p.vy;
+    if(p.x<0) p.x=W; if(p.x>W) p.x=0; if(p.y<0) p.y=H; if(p.y>H) p.y=0;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.283); ctx.fill();
+  });
+}
+
+/* ================= UI 更新 ================= */
+let lastSec=-1;
+function updateUI(){
+  const cur = fmtHM(t0+pos);
+  if(cur!==lastSec){ lastSec=cur; curT.textContent=cur; bigT.textContent=cur; bigD.textContent="回放 · "+fmtHM(t1); }
+  const p=Math.round(pos/TOT*1000);
+  if(Number(seek.value)!==p){ seek.value=p; seek.style.setProperty("--p",(p/10)+"%"); }
+  pct.textContent=Math.round(p/10)+"%";
+}
+
+/* ================= 控件 ================= */
+const btnPlay=$("btnPlay");
+btnPlay.addEventListener("click",function(){
+  if(pos>=TOT){ pos=0; idx=0; lastAgent=null; feedList.innerHTML=""; nodes.forEach(function(n){n.act=0;n.pulse=0}); }
+  playing=!playing;
+  btnPlay.innerHTML = playing ? '<svg class="ic" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>暂停'
+                             : '<svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>播放';
+});
+$("speed").addEventListener("click",function(e){
+  const b=e.target.closest("button"); if(!b) return;
+  speed=+b.dataset.s;
+  this.querySelectorAll("button").forEach(function(x){x.classList.toggle("on",x===b)});
+});
+seek.addEventListener("input",function(){
+  pos = seek.value/1000*TOT;
+  idx = 0;
+  while(idx<evs.length && timeToSec(evs[idx].t)-t0<=pos) idx++;
+  feedList.innerHTML="";
+  for(let i=0;i<idx;i++){ const ev=evs[i];
+    const n=nodes.find(function(x){return x.id===ev.a}); if(n){ n.act=Math.max(n.act,.5);
+      if(EV_BAD[ev.e]) n.errT=Math.max(n.errT,.8);
+      if(lastAgent&&lastAgent!==ev.a){} lastAgent=ev.a; }
+  }
+  let shown=evs.slice(Math.max(0,idx-FEED_MAX),idx);
+  for(let j=shown.length-1;j>=0;j--) pushFeed(shown[j]);
+});
+
+/* tooltip */
+scene.addEventListener("mousemove",function(e){
+  const r=scene.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  let hit=null;
+  nodes.forEach(function(n){ const d=Math.hypot(mx-n.x,my-n.y); const rad=n.id==="nina"?27:23;
+    if(d<rad+8) hit=n; });
+  if(hit){
+    const s=stats[hit.id]||{turn:0,text:0,bad:0,last:"—"};
+    const tk=TOKENS[hit.id]||{i:0,o:0,r:0,steps:0};
+    tooltip.innerHTML='<div class="n">'+hit.id.toUpperCase()+'</div><div class="r">'+hit.role+'</div>'+
+      '<div class="row"><span>TURN</span><b>'+s.turn+'</b></div>'+
+      '<div class="row"><span>消息</span><b>'+s.text+'</b></div>'+
+      '<div class="row"><span>Token IN</span><b>'+fmtTok(tk.i)+'</b></div>'+
+      '<div class="row"><span>Token OUT</span><b>'+fmtTok(tk.o)+'</b></div>'+
+      '<div class="row"><span>推理</span><b>'+fmtTok(tk.r)+'</b></div>'+
+      '<div class="row"><span>异常</span><b style="color:'+(s.bad?'#ff9a9a':'#7fd8a0')+'">'+s.bad+'</b></div>'+
+      '<div class="row"><span>最后活动</span><b>'+s.last+'</b></div>';
+    tooltip.style.left=(mx+14)+"px"; tooltip.style.top=(my-10)+"px";
+    tooltip.classList.add("show");
+  } else tooltip.classList.remove("show");
+});
+
+/* resize */
+window.addEventListener("resize",function(){ layout(); initParts(); });
+
+/* 初始化 */
+layout(); initParts();
+$("endT").textContent = fmtHM(t1);
+METRICS.forEach(function(m){
+  const el=document.createElement("div"); el.className="metric";
+  el.innerHTML=(m[2]?'<span class="dot '+m[2]+'"></span>':'')+'<b>'+m[1]+'</b> '+m[0];
+  metricsBox.appendChild(el);
+});
+
+/* tokenbar：按 input 用量降序 */
+const tkRow = $("tkRow");
+const tkSorted = AGENTS.slice().sort(function(a,b){
+  return (TOKENS[b.id]?TOKENS[b.id].i:0) - (TOKENS[a.id]?TOKENS[a.id].i:0);
+});
+const tkMax = Math.max.apply(null, tkSorted.map(function(a){return (TOKENS[a.id]?TOKENS[a.id].i:0)||1;}));
+tkSorted.forEach(function(a){
+  const tk = TOKENS[a.id] || {i:0,o:0,r:0,steps:0};
+  const cell = document.createElement("div"); cell.className="tk-cell";
+  if(tk.i===0) cell.setAttribute("data-zero","1");
+  const wIn = tk.i>0 ? Math.max(tk.i/tkMax*100, 2) : 0;
+  const wOut = tk.i>0 ? Math.max(tk.o/tkMax*100, 1) : 0;
+  cell.innerHTML = '<div class="tk-name"><span>'+a.id.toUpperCase()+'</span><b>'+fmtTok(tk.i)+'</b></div>'+
+    '<div class="tk-bar"><div class="tk-in" style="width:'+wIn.toFixed(1)+'%"></div><div class="tk-out" style="width:'+wOut.toFixed(1)+'%"></div></div>';
+  tkRow.appendChild(cell);
+});
+$("tkIn").textContent = fmtTok(TOK_TOTAL.i);
+$("tkOut").textContent = fmtTok(TOK_TOTAL.o);
+$("tkSteps").textContent = TOK_TOTAL.steps.toLocaleString();
+
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

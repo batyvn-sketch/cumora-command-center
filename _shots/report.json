@@ -1,0 +1,131 @@
+{
+  "src": "Cumora指挥中心.html",
+  "url": "file:///Users/a1234/Doubao/chats/2026-09-02/new-chat/cumora-command-center/Cumora%E6%8C%87%E6%8C%A5%E4%B8%AD%E5%BF%83.html",
+  "outdir": "/Users/a1234/Doubao/chats/2026-09-02/new-chat/cumora-command-center/_shots",
+  "include": [
+    "lint",
+    "screenshots",
+    "structure"
+  ],
+  "shots": {
+    "desktop": {
+      "screenshot": "/Users/a1234/Doubao/chats/2026-09-02/new-chat/cumora-command-center/_shots/Cumora指挥中心_desktop.jpg",
+      "screenshotBytes": 42775,
+      "truncated": false,
+      "structure": {
+        "title": "Cumora 指挥中心",
+        "firstH1": "CUMORA 指挥中心",
+        "viewport": {
+          "w": 1440,
+          "h": 757
+        },
+        "fullpage": {
+          "w": 1440,
+          "h": 757
+        },
+        "counts": {
+          "section": 1,
+          "h1": 1,
+          "h2": 0,
+          "img": 0,
+          "canvas": 1,
+          "svg": 2,
+          "links": 0,
+          "buttons": 9
+        }
+      },
+      "consoleErrors": [],
+      "consoleWarnings": [],
+      "horizontalOverflow": [],
+      "resourceErrors": [],
+      "reportSource": "cdp"
+    },
+    "mobile": {
+      "screenshot": "/Users/a1234/Doubao/chats/2026-09-02/new-chat/cumora-command-center/_shots/Cumora指挥中心_mobile.jpg",
+      "screenshotBytes": 43978,
+      "truncated": false,
+      "structure": {
+        "title": "Cumora 指挥中心",
+        "firstH1": "CUMORA 指挥中心",
+        "viewport": {
+          "w": 500,
+          "h": 701
+        },
+        "fullpage": {
+          "w": 500,
+          "h": 701
+        },
+        "counts": {
+          "section": 1,
+          "h1": 1,
+          "h2": 0,
+          "img": 0,
+          "canvas": 1,
+          "svg": 2,
+          "links": 0,
+          "buttons": 9
+        }
+      },
+      "consoleErrors": [],
+      "consoleWarnings": [],
+      "horizontalOverflow": [],
+      "resourceErrors": [],
+      "reportSource": "cdp"
+    }
+  },
+  "engine": "chrome_cli",
+  "chromiumExec": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "engineDegraded": true,
+  "engineDegradedReason": "playwright 未装",
+  "elapsedSec": 6.33,
+  "schemaVersion": 2,
+  "status": "pass",
+  "engineInfo": {
+    "name": "chrome_cli",
+    "degraded": true,
+    "degradedReasons": [
+      "playwright 未装"
+    ]
+  },
+  "input": {
+    "original": "Cumora指挥中心.html",
+    "resolvedPath": "/Users/a1234/Doubao/chats/2026-09-02/new-chat/cumora-command-center/Cumora指挥中心.html",
+    "baseUrl": "file:///Users/a1234/Doubao/chats/2026-09-02/new-chat/cumora-command-center/Cumora%E6%8C%87%E6%8C%A5%E4%B8%AD%E5%BF%83.html",
+    "protocol": "file",
+    "cwd": "/Users/a1234/Doubao/chats/2026-09-02/new-chat/cumora-command-center",
+    "mediaMode": {
+      "reducedMotion": false
+    }
+  },
+  "artifacts": {
+    "screenshots": [
+      {
+        "viewport": "desktop",
+        "path": "/Users/a1234/Doubao/chats/2026-09-02/new-chat/cumora-command-center/_shots/Cumora指挥中心_desktop.jpg",
+        "size": 42775,
+        "visualCoverage": {
+          "complete": true,
+          "reason": null
+        }
+      },
+      {
+        "viewport": "mobile",
+        "path": "/Users/a1234/Doubao/chats/2026-09-02/new-chat/cumora-command-center/_shots/Cumora指挥中心_mobile.jpg",
+        "size": 43978,
+        "visualCoverage": {
+          "complete": true,
+          "reason": null
+        }
+      }
+    ]
+  },
+  "summary": {
+    "blocker": 0,
+    "error": 0,
+    "warning": 0,
+    "info": 0
+  },
+  "findings": [],
+  "prioritizedActions": [],
+  "reportPath": "/Users/a1234/Doubao/chats/2026-09-02/new-chat/cumora-command-center/_shots/report.json"
+}

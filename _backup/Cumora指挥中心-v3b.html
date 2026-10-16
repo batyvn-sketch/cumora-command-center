@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cumora 指挥中心</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23070b14'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%233ec6d6' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%233ec6d6'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#070b14; --bg2:#0b1220; --panel:rgba(13,22,38,.72);
+  --line:rgba(94,146,214,.16); --grid:rgba(64,140,220,.07);
+  --cyan:#3ec6d6; --cyan-dim:#24556b; --amber:#ffb84d; --red:#ff5c5c;
+  --text:#c9d7ea; --dim:#5d7089; --mono:"SF Mono","JetBrains Mono","Menlo",monospace;
+  --sans:"PingFang SC","Helvetica Neue",system-ui,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:radial-gradient(1200px 600px at 20% -10%,#101a30 0%,var(--bg) 55%) var(--bg);
+  color:var(--text); font-family:var(--sans); overflow:hidden;
+}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:44px 44px;mask-image:radial-gradient(90% 80% at 50% 30%,#000 30%,transparent 100%);}
+#app{position:relative;z-index:1;height:100vh;display:flex;flex-direction:column}
+/* ===== 顶栏 ===== */
+header{flex:none;display:flex;align-items:center;gap:18px;padding:12px 20px;
+  border-bottom:1px solid var(--line);background:var(--panel);backdrop-filter:blur(6px)}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.brand .logo{width:30px;height:30px;flex:none}
+.brand h1{font-size:15px;font-weight:600;letter-spacing:.06em;color:#e6eefc;white-space:nowrap}
+.brand p{font-size:10px;color:var(--dim);font-family:var(--mono);margin-top:2px;letter-spacing:.05em}
+.metrics{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
+.metric{display:flex;align-items:center;gap:6px;padding:5px 10px;border:1px solid var(--line);
+  border-radius:999px;font-size:11px;color:var(--dim);background:rgba(64,140,220,.05);white-space:nowrap}
+.metric b{font-family:var(--mono);font-size:13px;color:var(--text);font-weight:600}
+.metric .dot{width:6px;height:6px;border-radius:50%}
+.metric .dot.ok{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+.metric .dot.warn{background:var(--amber);box-shadow:0 0 8px var(--amber)}
+.metric .dot.err{background:var(--red);box-shadow:0 0 8px var(--red)}
+.controls{display:flex;align-items:center;gap:8px;margin-left:4px;flex:none}
+.btn{display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--line);
+  border-radius:8px;background:rgba(64,140,220,.08);color:var(--text);font-size:12px;cursor:pointer;
+  font-family:var(--sans);transition:border-color .15s,background .15s}
+.btn:hover{border-color:var(--cyan);background:rgba(62,198,214,.12)}
+.btn:active{transform:translateY(1px)}
+.btn .ic{width:14px;height:14px;fill:currentColor}
+.speed{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.speed button{border:none;background:transparent;color:var(--dim);padding:6px 9px;font-size:11px;
+  font-family:var(--mono);cursor:pointer}
+.speed button.on{background:rgba(62,198,214,.16);color:var(--cyan)}
+.timer{font-family:var(--mono);font-size:12px;color:var(--dim);min-width:118px;text-align:right}
+.timer b{color:var(--cyan)}
+/* ===== 项目栏 ===== */
+.projbar{flex:none;display:flex;gap:6px;padding:7px 20px;border-bottom:1px solid var(--line);
+  background:rgba(9,16,30,.55);overflow-x:auto;scrollbar-width:thin;scrollbar-color:rgba(94,146,214,.4) transparent}
+.proj-tab{display:flex;align-items:center;gap:7px;padding:5px 12px;border:1px solid var(--line);
+  border-radius:999px;background:rgba(64,140,220,.05);color:var(--dim);font-size:11px;cursor:pointer;
+  white-space:nowrap;font-family:var(--sans);flex:none;transition:border-color .15s,color .15s,background .15s}
+.proj-tab:hover{border-color:currentColor}
+.proj-tab .sw{width:7px;height:7px;border-radius:50%;flex:none}
+.proj-tab .cnt{font-size:10px;font-family:var(--mono);opacity:.75}
+.proj-tab.on{color:#e6eefc;background:rgba(62,198,214,.09);border-color:currentColor}
+.proj-tab.on .sw{box-shadow:0 0 8px currentColor}
+.proj-tab.on .cnt{opacity:.9}
+/* ===== 主区 ===== */
+main{flex:1;position:relative;min-height:0}
+#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.alertbar{position:absolute;top:14px;left:50%;transform:translateX(-50%);padding:7px 18px;border-radius:999px;
+  background:rgba(255,92,92,.12);border:1px solid rgba(255,92,92,.4);color:#ff9a9a;font-size:12px;
+  opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;font-family:var(--mono)}
+.alertbar.show{opacity:1}
+.clock{position:absolute;top:14px;right:18px;text-align:right;pointer-events:none}
+.clock .t{font-family:var(--mono);font-size:22px;color:#e6eefc;font-weight:600}
+.clock .d{font-size:10px;color:var(--dim);margin-top:2px;letter-spacing:.12em}
+#tooltip{position:absolute;z-index:5;pointer-events:none;opacity:0;transition:opacity .12s;
+  background:rgba(10,18,34,.94);border:1px solid var(--line);border-radius:10px;padding:10px 13px;
+  min-width:180px;box-shadow:0 12px 32px rgba(0,0,0,.5)}
+#tooltip.show{opacity:1}
+#tooltip .n{font-size:13px;font-weight:600;color:#e6eefc}
+#tooltip .r{font-size:10px;color:var(--dim);margin:3px 0 7px;font-family:var(--mono)}
+#tooltip .row{display:flex;justify-content:space-between;font-size:11px;color:var(--dim);padding:2px 0}
+#tooltip .row b{color:var(--text);font-family:var(--mono);font-weight:600}
+/* ===== 进度条 ===== */
+.progressbar{flex:none;display:flex;align-items:center;gap:12px;padding:7px 20px;
+  border-top:1px solid var(--line);background:var(--panel)}
+.progressbar .label{font-size:10px;color:var(--dim);font-family:var(--mono);flex:none}
+.progressbar .label b{color:var(--cyan);font-weight:600}
+#seek{flex:1;-webkit-appearance:none;appearance:none;height:3px;border-radius:2px;
+  background:linear-gradient(90deg,var(--cyan) var(--p,0%),rgba(94,146,214,.18) var(--p,0%));cursor:pointer}
+#seek::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;
+  background:var(--cyan);box-shadow:0 0 8px var(--cyan);border:none}
+#seek::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--cyan);border:none}
+/* ===== 事件流 ===== */
+#feed{flex:none;height:168px;display:flex;flex-direction:column;border-top:1px solid var(--line);
+  background:rgba(7,12,22,.88)}
+#feed .fh{flex:none;display:flex;align-items:center;gap:8px;padding:5px 16px;font-size:10px;
+  color:var(--dim);letter-spacing:.12em;border-bottom:1px solid rgba(94,146,214,.08)}
+#feed .fh .live{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan);
+  animation:blink 1.6s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+#feed ul{flex:1;overflow:hidden;list-style:none;padding:0;position:relative}
+#feed li{display:flex;align-items:baseline;gap:10px;padding:2px 16px;font-size:11px;
+  font-family:var(--mono);color:var(--dim);animation:rowin .18s ease-out}
+@keyframes rowin{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+#feed li .tm{flex:none;color:#31475f;font-size:10px}
+#feed li .ag{flex:none;font-weight:600;color:var(--cyan);width:52px}
+#feed li .ev{flex:none;padding:0 6px;border-radius:4px;font-size:10px;width:64px;text-align:center}
+#feed li .ev.turn_start{color:var(--cyan);background:rgba(62,198,214,.1)}
+#feed li .ev.turn_done{color:#7fd8a0;background:rgba(127,216,160,.08)}
+#feed li .ev.error,#feed li .ev.rate_limit{color:#ff9a9a;background:rgba(255,92,92,.12)}
+#feed li .ev.text{color:var(--dim);background:rgba(94,146,214,.06)}
+#feed li .ev.wake{color:var(--amber);background:rgba(255,184,77,.08)}
+#feed li .ms{color:#8fa3bf;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:52vw}
+#feed li .ms:empty{display:none}
+/* ===== token 用量 ===== */
+#tokenbar{flex:none;padding:8px 20px 7px;border-top:1px solid var(--line);background:rgba(9,16,30,.9)}
+.tk-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px}
+.tk-head .l{font-size:10px;color:var(--dim);letter-spacing:.14em}
+.tk-head .r{font-size:10px;font-family:var(--mono);color:var(--dim)}
+.tk-head .r b{color:var(--cyan);font-weight:600}
+.tk-head .r em{font-style:normal;color:#66d9a8}
+.tk-row{display:flex;gap:9px;flex-wrap:wrap}
+.tk-cell{flex:1 1 118px;min-width:0}
+.tk-name{display:flex;justify-content:space-between;align-items:baseline;font-size:10px;
+  font-family:var(--mono);color:#8fb0cf;gap:4px}
+.tk-name b{color:var(--cyan);font-weight:600;font-size:10px}
+.tk-bar{position:relative;display:flex;height:6px;border-radius:3px;background:rgba(64,140,220,.1);margin-top:3px;overflow:hidden}
+.tk-in{position:absolute;left:0;top:0;bottom:0;background:rgba(62,198,214,.4)}
+.tk-out{position:absolute;left:0;top:0;bottom:0;background:#66d9a8}
+.tk-cell[data-zero="1"] .tk-name{opacity:.45}
+/* 窄屏 */
+@media (max-width:720px){
+  header{flex-wrap:wrap;gap:10px;padding:10px 12px}
+  .metrics{margin-left:0;order:3;width:100%}
+  .controls{order:2}
+  .brand p{display:none}
+  .timer{min-width:0}
+  #feed{height:150px}
+  #feed li .ms{max-width:34vw}
+  #tokenbar{padding:7px 12px}
+  .tk-cell{flex:1 1 76px}
+  .tk-name b{font-size:9px}
+  .projbar{padding:7px 12px;gap:5px}
+  .proj-tab{padding:5px 10px;font-size:10px}
+}
+@media (prefers-reduced-motion:reduce){
+  #feed .fh .live{animation:none}
+  #feed li{animation:none}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32"><circle cx="16" cy="16" r="8" fill="none" stroke="#3ec6d6" stroke-width="2"/><circle cx="16" cy="16" r="2.5" fill="#3ec6d6"/><circle cx="16" cy="9" r="1.6" fill="#ffb84d"/></svg>
+      <div>
+        <h1>CUMORA 指挥中心</h1>
+        <p>AGENT ORCHESTRATION // daemon.log 回放</p>
+      </div>
+    </div>
+    <div class="metrics" id="metrics"></div>
+    <div class="controls">
+      <button class="btn" id="btnPlay" title="播放 / 暂停">
+        <svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>播放
+      </button>
+      <div class="speed" id="speed">
+        <button data-s="1" class="on">1x</button>
+        <button data-s="4">4x</button>
+        <button data-s="16">16x</button>
+      </div>
+      <div class="timer"><b id="curT">--:--:--</b> / <span id="endT">--:--:--</span></div>
+    </div>
+  </header>
+
+  <div class="projbar" id="projbar"></div>
+
+  <main>
+    <canvas id="scene"></canvas>
+    <div class="alertbar" id="alertbar"></div>
+    <div class="clock"><div class="t" id="bigT">--:--:--</div><div class="d" id="bigD">UTC+8 · LIVE REPLAY</div></div>
+    <div id="tooltip"></div>
+  </main>
+
+  <div class="progressbar">
+    <span class="label">进度 <b id="pct">0%</b></span>
+    <input type="range" id="seek" min="0" max="1000" value="0">
+  </div>
+
+  <div id="tokenbar">
+    <div class="tk-head">
+      <span class="l" id="tkTitle">TOKEN 用量 · daemon.log 全量累计</span>
+      <span class="r">输入 <b id="tkIn">0</b> · 输出 <em id="tkOut">0</em> · <span id="tkSteps">0</span> 步</span>
+    </div>
+    <div class="tk-row" id="tkRow"></div>
+  </div>
+
+  <section id="feed">
+    <div class="fh"><span class="live"></span>事件流 EVENT STREAM</div>
+    <ul id="feedList"></ul>
+  </section>
+</div>
+
+<script>
+"use strict";
+/* ================= 数据 ================= */
+const RAW_EVENTS = [["05:32:22", "nina", "step_finish", "in 5K out 0K", ""], ["05:32:24", "iris", "text", "OK Nova is right \u2014 my V2 math was sloppy again. She re-did the arithmetic and caught me: - V2 \\\"11.5 \u4e2d\u95f4\u503c\\\" = 3 + 1.2 + 1", ""], ["05:32:24", "iris", "step_finish", "in 4K out 4K", ""], ["05:32:29", "atlas", "wake", "", "eda"], ["05:32:29", "nina", "wake", "", "eda"], ["05:32:29", "nova", "wake", "", "eda"], ["05:32:29", "iris", "step_finish", "in 0K out 0K", ""], ["05:32:30", "nina", "step_finish", "in 5K out 0K", "eda"], ["05:32:37", "iris", "text", "", ""], ["05:32:37", "iris", "step_finish", "in 0K out 0K", ""], ["05:32:38", "nina", "text", "", "eda"], ["05:32:39", "nina", "step_finish", "in 0K out 0K", "eda"], ["05:32:43", "iris", "text", "Memory updated. V3 is the locked design: - \u4e00\u884c\u7b49\u5f0f: \u9762\u677f3 + \u6ce1\u68c90.3 + PCB1.6 + \u9ea6\u62c90.5 + \u7535\u6c606 + \u80cc\u58c10.5 = **11.9mm** (\u5b98\u65b9\u8def\u5f84) - FPC \u6298\u5f2f", ""], ["05:32:43", "iris", "step_finish", "in 0K out 0K", ""], ["05:32:45", "iris", "turn_done", "", ""], ["05:33:02", "nina", "text", "Iris #204's V3 confirms panel-on-board (panel directly on PCB, gap\u21920). Since her option B = panel embedded in the housin", "eda"], ["05:33:02", "nina", "step_finish", "in 10K out 0K", "eda"], ["05:33:11", "iris", "wake", "", "eda"], ["05:33:11", "atlas", "wake", "", "eda"], ["05:33:11", "nova", "wake", "", "eda"], ["05:33:11", "nina", "step_finish", "in 2K out 0K", "eda"], ["05:33:24", "nina", "text", "", "eda"], ["05:33:24", "atlas", "text", "Full V2 read. Cross-checking everything against my delivered data (cell #187, datasheet #184, PM-accepted\u53e3\u5f84 #188):  **\u2713 ", "eda"], ["05:33:24", "nina", "step_finish", "in 0K out 0K", "eda"], ["05:33:24", "atlas", "step_finish", "in 4K out 1K", "eda"], ["05:33:35", "nina", "text", "Done. This wake handled Nova's FPC-\u8ba9\u4f4d directive and resolved the board-shape question.  - **Read Nova #203 + Iris #204**", "eda"], ["05:33:35", "nina", "step_finish", "in 0K out 0K", "eda"], ["05:33:38", "atlas", "step_finish", "in 4K out 0K", "eda"], ["05:33:40", "nina", "turn_done", "", "eda"], ["05:34:06", "atlas", "text", "HELD \u2014 Iris self-caught the arithmetic (#204: \\\"\u6211\u4e2d\u95f4\u503c\u5c31\u662f\u7b97\u9519\u4e86\\\", reissued V3 = 11.9mm via the panel-on-board route \u2014 my flag", "eda"], ["05:34:07", "atlas", "step_finish", "in 0K out 0K", "eda"], ["05:35:16", "atlas", "text", "Full state read. Recomposing against it:  - **Flag \u2460 superseded** \u2014 Iris self-caught it; V3's equations verify clean (11", "eda"], ["05:35:19", "atlas", "step_finish", "in 2K out 0K", "eda"], ["05:35:57", "atlas", "step_finish", "in 3K out 0K", "eda"], ["05:36:12", "iris", "wake", "", "eda"], ["05:36:12", "nina", "wake", "", "eda"], ["05:36:12", "nova", "wake", "", "eda"], ["05:36:13", "atlas", "step_finish", "in 0K out 0K", "eda"], ["05:36:36", "atlas", "text", "", "eda"], ["05:36:36", "atlas", "step_finish", "in 0K out 0K", "eda"], ["05:36:50", "atlas", "text", "This wake complete:  1. **Verified Iris's V2 against my data** (battery 6mm \u2713, keep-out 21\xd731 matches the 602030 footpri", "eda"], ["05:36:50", "atlas", "step_finish", "in 0K out 0K", "eda"], ["05:36:53", "atlas", "turn_done", "", "eda"], ["05:50:25", "nova", "wake", "", "priv"], ["05:50:25", "nina", "wake", "", "priv"], ["05:50:29", "nina", "turn_start", "", ""], ["05:50:56", "nina", "text", "", "priv"], ["05:50:57", "nina", "step_finish", "in 8K out 0K", "priv"], ["05:51:41", "nina", "text", "", "priv"], ["05:51:42", "nina", "step_finish", "in 8K out 1K", "priv"], ["05:51:53", "nina", "text", "", "priv"], ["05:51:53", "nina", "step_finish", "in 7K out 0K", "priv"], ["05:52:05", "nina", "text", "", "priv"], ["05:52:05", "nina", "step_finish", "in 0K out 0K", "priv"], ["05:52:24", "nina", "text", "", "priv"], ["05:53:24", "nina", "step_finish", "in 1K out 1K", "priv"], ["05:53:47", "nina", "text", "", "priv"], ["05:54:47", "nina", "step_finish", "in 2K out 1K", "priv"], ["05:55:05", "nina", "text", "", "priv"], ["05:55:47", "nina", "step_finish", "in 19K out 0K", "priv"], ["05:56:00", "nina", "text", "", "priv"], ["05:56:03", "nina", "step_finish", "in 3K out 0K", "priv"], ["05:56:23", "nina", "text", "", "priv"], ["05:56:24", "nina", "step_finish", "in 1K out 0K", "priv"], ["05:56:34", "nina", "text", "", "priv"], ["05:56:36", "nina", "step_finish", "in 299K out 0K", "priv"], ["05:56:43", "nina", "text", "", "priv"], ["05:57:43", "nina", "step_finish", "in 0K out 0K", "priv"], ["05:57:54", "nina", "text", "", "priv"], ["05:57:54", "nina", "step_finish", "in 0K out 0K", "priv"], ["05:58:01", "nina", "step_finish", "in 0K out 0K", "priv"], ["05:58:05", "iris", "wake", "", "eda"], ["05:58:05", "atlas", "wake", "", "eda"], ["05:58:05", "nova", "wake", "", "eda"], ["05:58:05", "nina", "step_finish", "in 0K out 0K", "priv"], ["05:58:12", "nina", "text", "", "priv"], ["05:58:12", "nina", "step_finish", "in 0K out 0K", "priv"], ["05:58:18", "nina", "text", "Done. The scheduled continuation fired and I pushed the build further, hitting one real tooling blocker.  **Shipped:** -", "priv"], ["05:58:18", "nina", "step_finish", "in 0K out 0K", "priv"], ["05:58:21", "nina", "turn_done", "", "priv"], ["06:00:25", "peta", "wake", "", "priv"], ["06:00:25", "nova", "wake", "", "priv"], ["06:00:32", "nova", "turn_start", "", ""], ["06:00:55", "nova", "text", "", "priv"], ["06:00:55", "nova", "step_finish", "in 5K out 0K", "priv"], ["06:01:41", "nova", "step_finish", "in 0K out 0K", "priv"], ["06:01:57", "nova", "text", "06:00Z checkpoint executed \u2014 verify-only, no post needed:  1. **batyvn's two items: both closed** (by different paths th", "priv"], ["06:01:57", "nova", "step_finish", "in 1K out 0K", "priv"], ["06:02:00", "nova", "turn_done", "", "priv"], ["06:05:32", "nova", "turn_start", "", ""], ["06:05:53", "nova", "step_finish", "in 6K out 0K", "priv"], ["06:06:12", "nova", "step_finish", "in 2K out 0K", "priv"], ["06:06:22", "nova", "step_finish", "in 0K out 0K", "priv"], ["06:06:41", "nova", "step_finish", "in 0K out 0K", "priv"], ["06:07:32", "iris", "wake", "", "eda"], ["06:07:32", "nina", "wake", "", "eda"], ["06:07:32", "nova", "step_finish", "in 0K out 0K", "priv"], ["06:07:33", "atlas", "wake", "", "eda"], ["06:07:53", "nova", "text", "Posted (seq 208) covering three things in one shot:  1. **Nina's 22-part milestone** \u2014 accepted, including her `lib_Symb", "priv"], ["06:07:53", "nova", "step_finish", "in 1K out 0K", "priv"], ["06:07:55", "nova", "turn_done", "", "priv"], ["06:20:25", "nova", "wake", "", "priv"], ["06:20:25", "nina", "wake", "", "priv"], ["06:20:28", "nina", "turn_start", "", ""], ["06:20:47", "nina", "text", "", "priv"], ["06:20:49", "nina", "step_finish", "in 2K out 0K", "priv"], ["06:20:58", "nina", "text", "", "priv"], ["06:21:00", "nina", "step_finish", "in 0K out 0K", "priv"], ["06:21:15", "nina", "text", "", "priv"], ["06:21:16", "nina", "step_finish", "in 0K out 0K", "priv"], ["06:21:26", "nina", "text", "", "priv"], ["06:21:26", "nina", "step_finish", "in 0K out 0K", "priv"], ["06:21:35", "nina", "text", "", "priv"], ["06:21:35", "nina", "step_finish", "in 0K out 0K", "priv"], ["06:21:50", "nina", "text", "Caught an error: the 4 \\\"100nF\\\" caps (U7\u2013U10) actually placed a **wrong part** \u2014 search `'C1525'` returned a junk fallb", "priv"], ["06:21:52", "nina", "step_finish", "in 0K out 0K", "priv"], ["06:21:58", "nina", "text", "", "priv"], ["06:21:58", "nina", "step_finish", "in 0K out 0K", "priv"], ["06:22:12", "nina", "text", "", "priv"], ["06:22:12", "nina", "step_finish", "in 0K out 0K", "priv"], ["06:22:17", "iris", "wake", "", "eda"], ["06:22:17", "atlas", "wake", "", "eda"], ["06:22:17", "nova", "wake", "", "eda"], ["06:22:17", "nina", "step_finish", "in 0K out 0K", "priv"], ["06:22:26", "nina", "text", "", "priv"], ["06:22:26", "nina", "step_finish", "in 0K out 0K", "priv"], ["06:22:33", "nina", "step_finish", "in 0K out 0K", "priv"], ["06:22:39", "nina", "text", "Done. The follow-up fired and I finished the component phase, catching a material error.  **Shipped:** - **Placed BT1** ", "priv"], ["06:22:39", "nina", "step_finish", "in 0K out 0K", "priv"], ["06:22:43", "nina", "turn_done", "", "priv"], ["06:29:29", "nova", "turn_start", "", ""], ["06:29:50", "nova", "step_finish", "in 6K out 0K", "eda"], ["06:30:18", "nova", "step_finish", "in 1K out 0K", "eda"], ["06:30:59", "nova", "step_finish", "in 2K out 0K", "eda"], ["06:32:07", "iris", "wake", "", "eda"], ["06:32:07", "atlas", "wake", "", "eda"], ["06:32:07", "nina", "wake", "", "eda"], ["06:32:08", "nova", "step_finish", "in 0K out 0K", "eda"], ["06:32:28", "nova", "text", "Posted (seq 210, after one network retry): BOM milestone accepted with a **value spot-check** \u2014 Rprog 12k\u03a9 present (C257", "eda"], ["06:32:28", "nova", "step_finish", "in 0K out 0K", "eda"], ["06:32:30", "nova", "turn_done", "", "eda"], ["06:39:09", "nina", "turn_start", "", ""], ["06:39:22", "nina", "text", "", "eda"], ["06:39:23", "nina", "step_finish", "in 3K out 0K", "eda"], ["06:39:33", "nina", "text", "", "eda"], ["06:39:34", "nina", "step_finish", "in 1K out 0K", "eda"], ["06:39:40", "nina", "text", "", "eda"], ["06:39:40", "nina", "step_finish", "in 0K out 0K", "eda"], ["06:39:48", "nina", "text", "", "eda"], ["06:39:48", "nina", "step_finish", "in 0K out 0K", "eda"], ["06:39:56", "nina", "text", "", "eda"], ["06:39:56", "nina", "step_finish", "in 0K out 0K", "eda"], ["06:40:08", "nina", "text", "", "eda"], ["06:40:09", "nina", "step_finish", "in 0K out 0K", "eda"], ["06:40:15", "nina", "text", "", "eda"], ["06:40:15", "nina", "step_finish", "in 0K out 0K", "eda"], ["06:40:29", "nina", "text", "", "eda"], ["06:40:29", "nina", "step_finish", "in 0K out 0K", "eda"], ["06:40:36", "iris", "wake", "", "eda"], ["06:40:36", "atlas", "wake", "", "eda"], ["06:40:36", "nova", "wake", "", "eda"], ["06:40:36", "nina", "step_finish", "in 0K out 0K", "eda"], ["06:40:43", "nina", "text", "", "eda"], ["06:40:43", "nina", "step_finish", "in 0K out 0K", "eda"], ["06:40:51", "nina", "text", "Done \u2014 cleared both of Nova's pre-PCB gates.  - **Gate 1\u300c24pin \u9010\u811a \u2713\u300d:** verified `getAllPinsByPrimitiveId` for the panel", "eda"], ["06:40:51", "nina", "step_finish", "in 0K out 0K", "eda"], ["06:40:55", "nina", "turn_done", "", "eda"], ["06:47:51", "nova", "turn_start", "", ""], ["06:48:13", "nova", "step_finish", "in 6K out 0K", "eda"], ["06:48:45", "iris", "wake", "", "eda"], ["06:48:45", "atlas", "wake", "", "eda"], ["06:48:45", "nina", "wake", "", "eda"], ["06:48:45", "nova", "step_finish", "in 1K out 0K", "eda"], ["06:49:14", "nova", "step_finish", "in 0K out 1K", "eda"], ["06:49:26", "nova", "text", "Released the schematic phase (seq 212): both gates passed \u2014 Nina's Gate 1 verification was clean (EP1/J2 independently d", "eda"], ["06:49:26", "nova", "step_finish", "in 1K out 0K", "eda"], ["06:49:29", "nova", "turn_done", "", "eda"], ["07:07:40", "atlas", "wake", "", "eda"], ["07:07:40", "iris", "wake", "", "eda"], ["07:07:40", "nova", "wake", "", "eda"], ["07:07:40", "nina", "wake", "", "eda"], ["07:07:44", "nina", "turn_start", "", "eda"], ["07:07:44", "nova", "turn_start", "", "eda"], ["07:07:44", "iris", "turn_start", "", "eda"], ["07:07:50", "atlas", "turn_start", "", "eda"], ["07:07:57", "nina", "text", "", "eda"], ["07:07:58", "nina", "step_finish", "in 2K out 0K", "eda"], ["07:08:03", "iris", "text", "batyvn (07:07Z, m-82b58e83): \\\"\u6211\u5df2\u7ecf\u770b\u5230\u539f\u7406\u56fe\u4e86 PCB\u8fd8\u6ca1\u753b\u5462\u662f\u5427\\\" \u2014 \\\"I can see the schematic now. PCB isn't drawn yet, right?\\\"  Gro", "eda"], ["07:08:04", "iris", "step_finish", "in 268K out 0K", "eda"], ["07:08:08", "nina", "text", "", "eda"], ["07:08:09", "iris", "wake", "", "eda"], ["07:08:09", "nova", "wake", "", "eda"], ["07:08:09", "atlas", "wake", "", "eda"], ["07:08:09", "nina", "step_finish", "in 0K out 0K", "eda"], ["07:08:16", "nina", "text", "", "eda"], ["07:08:16", "nina", "step_finish", "in 0K out 0K", "eda"], ["07:08:21", "iris", "text", "Major progress while I was waiting: - 05:36 Atlas: V3 \u7535\u6c60\u4fa7\u6838\u6bd5 \u2713 \u2014 \u7b49\u5f0f\u95ed\u4e86 - 05:58 Nina: P1 \u4e0b\u6599 22 \u5b9e\u4ef6\u5df2\u843d, J2 FPC connector + GDE", "eda"], ["07:08:22", "iris", "step_finish", "in 1K out 1K", "eda"], ["07:08:28", "nina", "text", "`sch_PrimitiveWire.create(line, net, color, lineWidth, lineType)` \u2014 wires need endpoints on pin coordinates. The wiring ", "eda"], ["07:08:28", "nina", "step_finish", "in 1K out 0K", "eda"], ["07:08:30", "iris", "text", "HELD \u2014 Nina answered in the same instant (seq 214, \\\"\u5bf9\uff0cPCB \u8fd8\u6ca1\u5f00\u753b\u2014\u2014\u521a\u8fc7 Nova \u7684\u653e\u884c\uff08#212 \u539f\u7406\u56fe\u9636\u6bb5\u95ed\u7ae0\uff09\uff0c\u8fd9\u5c31\u5f00 (nod). \u73b0\u72b6\uff1a\u539f\u7406\u56fe P1 23 \u9897\u3001\u4f4d\u53f7\u5f52", "eda"], ["07:08:30", "iris", "step_finish", "in 0K out 0K", "eda"], ["07:08:37", "iris", "text", "Stand-down. Nina answered the human's \\\"PCB hasn't been drawn yet, right?\\\" with the exact same ground-truth I was compo", "eda"], ["07:08:37", "iris", "step_finish", "in 0K out 0K", "eda"], ["07:08:39", "iris", "turn_done", "", "eda"], ["07:08:42", "nina", "text", "Done. batyvn's question answered.  - **Read**: Nova #212 already **authorized the PCB phase** (\u539f\u7406\u56fe\u9636\u6bb5\u95ed\u7ae0) with three items", "eda"], ["07:08:42", "nina", "step_finish", "in 0K out 0K", "eda"], ["07:08:46", "nina", "turn_done", "", "eda"], ["07:08:53", "nova", "step_finish", "in 5K out 0K", "eda"], ["07:09:16", "atlas", "text", "", "eda"], ["07:09:16", "atlas", "step_finish", "in 4K out 0K", "eda"], ["07:09:22", "nova", "text", "Nina answered batyvn within a minute (07:08) \u2014 and her answer covers it fully: PCB not started yet, schematic done (23 p", "eda"], ["07:09:23", "nova", "step_finish", "in 1K out 0K", "eda"], ["07:09:25", "nova", "turn_done", "", "eda"], ["07:09:51", "nova", "turn_start", "", "eda"], ["07:10:08", "atlas", "text", "Nina already answered batyvn within a minute (07:08: \\\"\u5bf9\uff0cPCB \u8fd8\u6ca1\u5f00\u753b\u2014\u2014\u521a\u8fc7 Nova \u653e\u884c #212\uff0c\u8fd9\u5c31\u5f00...\\\"). His question is fully hand", "eda"], ["07:10:09", "atlas", "step_finish", "in 2K out 0K", "eda"], ["07:10:14", "iris", "wake", "", "eda"], ["07:10:14", "nina", "wake", "", "eda"], ["07:10:14", "atlas", "wake", "", "eda"], ["07:10:14", "nova", "step_finish", "in 5K out 0K", "eda"], ["07:10:25", "nova", "wake", "", "priv"], ["07:10:25", "nina", "wake", "", "priv"], ["07:10:28", "nova", "text", "Posted a one-liner confirming Nina's answer to batyvn (seq 215) \u2014 schematic closed with 23 parts and both verification g", "priv"], ["07:10:28", "nova", "step_finish", "in 0K out 0K", "priv"], ["07:10:31", "nova", "turn_done", "", "priv"], ["07:10:32", "nova", "turn_start", "", ""], ["07:10:36", "nina", "turn_start", "", ""], ["07:10:37", "iris", "wake", "", "eda"], ["07:10:37", "nova", "wake", "", "eda"], ["07:10:37", "atlas", "wake", "", "eda"], ["07:10:37", "nina", "wake", "", "eda"], ["07:11:00", "nina", "text", "", "eda"], ["07:11:00", "nova", "wake", "", "eda"], ["07:11:00", "iris", "wake", "", "eda"], ["07:11:00", "atlas", "wake", "", "eda"], ["07:11:00", "nina", "step_finish", "in 2K out 0K", "eda"], ["07:11:03", "iris", "turn_start", "", "eda"], ["07:11:03", "nova", "step_finish", "in 5K out 0K", "eda"], ["07:11:08", "nina", "text", "", "eda"], ["07:11:08", "nina", "step_finish", "in 0K out 0K", "eda"], ["07:11:12", "atlas", "text", "Full picture: Nova #212 closed the schematic chapter (two gates passed \u2014 Nina's pin verification used my #185 datasheet ", "eda"], ["07:11:12", "atlas", "step_finish", "in 2K out 0K", "eda"], ["07:11:20", "iris", "text", "Same pattern as last two turns: batyvn (07:11Z) asks Nina \\\"@nina-4idw \u5f00\u59cbPCB\u4e86\u4e48\\\" \u2014 a soft 1:1 to Nina. Nina already answ", "eda"], ["07:11:20", "iris", "step_finish", "in 4K out 0K", "eda"], ["07:11:20", "nina", "text", "", "eda"], ["07:11:21", "nina", "step_finish", "in 0K out 0K", "eda"], ["07:11:25", "iris", "text", "No action \u2014 soft 1:1 to Nina, Nina answered in the same minute (seq 215: PCB building now \u2014 92\xd773 \u677f\u6846 + P1 \u5bfc\u5165 + \u7535\u6c60 keep-o", "eda"], ["07:11:25", "iris", "step_finish", "in 0K out 0K", "eda"], ["07:11:28", "iris", "turn_done", "", "eda"], ["07:11:28", "nina", "text", "", "eda"], ["07:11:28", "nina", "step_finish", "in 0K out 0K", "eda"], ["07:11:35", "atlas", "text", "This wake complete \u2014 correctly standing down:  1. **batyvn's question was already answered** by Nina (#214, 1 minute aft", "eda"], ["07:11:35", "atlas", "step_finish", "in 2K out 0K", "eda"], ["07:11:36", "nina", "wake", "", "priv"], ["07:11:36", "nova", "step_finish", "in 2K out 0K", "eda"], ["07:11:38", "nina", "text", "", "priv"], ["07:11:38", "nina", "step_finish", "in 1K out 0K", "priv"], ["07:11:38", "atlas", "turn_done", "", "eda"], ["07:11:39", "atlas", "turn_start", "", "eda"], ["07:11:50", "nina", "text", "", "priv"], ["07:11:50", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:11:51", "nova", "text", "Handled both items from this wake:  1. **Calendar task (P1 wiring)** \u2014 fired in the Nina DM: sent her the structured 7-g", "eda"], ["07:11:51", "nova", "step_finish", "in 1K out 0K", "eda"], ["07:11:54", "nova", "turn_done", "", "eda"], ["07:11:58", "nina", "text", "", "priv"], ["07:11:58", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:12:11", "nina", "text", "", "priv"], ["07:12:11", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:12:20", "nina", "text", "", "priv"], ["07:12:20", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:12:21", "nova", "turn_start", "", "eda"], ["07:12:31", "atlas", "text", "Room read \u2014 this wake requires no action from me:  - batyvn's new question was **soft 1:1 to Nina** (\\\"@nina-4idw \u5f00\u59cbPCB\u4e86", "eda"], ["07:12:31", "atlas", "step_finish", "in 5K out 0K", "eda"], ["07:12:34", "nina", "text", "", "priv"], ["07:12:34", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:12:36", "atlas", "turn_done", "", "eda"], ["07:12:42", "nova", "text", "", "eda"], ["07:12:42", "nova", "step_finish", "in 5K out 0K", "eda"], ["07:12:43", "nina", "text", "", "priv"], ["07:12:43", "nina", "step_finish", "in 1K out 0K", "priv"], ["07:12:46", "nova", "turn_done", "", "eda"], ["07:12:50", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:12:59", "nina", "text", "", "priv"], ["07:13:00", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:13:08", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:13:15", "nina", "text", "Done. This wake moved the PCB forward and found a tooling blocker.  **Shipped:** - **Opened PCB1** and placed the **batt", "priv"], ["07:13:15", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:13:20", "nina", "turn_done", "", "priv"], ["07:13:21", "nina", "turn_start", "", ""], ["07:13:39", "nina", "text", "", "priv"], ["07:13:40", "nova", "wake", "", "priv"], ["07:13:40", "nina", "step_finish", "in 2K out 0K", "priv"], ["07:13:44", "nova", "turn_start", "", ""], ["07:13:52", "nina", "text", "", "priv"], ["07:13:53", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:14:10", "nina", "text", "P1 reopened; `createNetPort(direction, net, x, y, \u2026)` works, and library symbols have **functional pin names** (U2 = TEM", "priv"], ["07:14:15", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:14:22", "nina", "text", "", "priv"], ["07:14:22", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:14:26", "nova", "text", "Nina's message is a pure acknowledgment (\\\"\u6e05\u5355\u6536\uff0c\u8fd9\u5c31\u5f00\u8dd1\\\") \u2014 nothing pending on me, and replying would just start an ack loo", "priv"], ["07:14:26", "nova", "step_finish", "in 5K out 0K", "priv"], ["07:14:29", "nova", "turn_done", "", "priv"], ["07:14:32", "nina", "text", "", "priv"], ["07:15:32", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:15:42", "nina", "text", "", "priv"], ["07:16:22", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:16:31", "nina", "text", "", "priv"], ["07:16:32", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:16:40", "nina", "text", "", "priv"], ["07:16:40", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:16:47", "nova", "wake", "", "priv"], ["07:16:48", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:16:54", "nina", "text", "Done. This wake began the wiring.  - **Acked Nova's DM** (7-group checklist; seq 255) \u2014 confirmed proceeding to PCB with", "priv"], ["07:16:54", "nina", "step_finish", "in 0K out 0K", "priv"], ["07:17:00", "nina", "turn_done", "", "priv"], ["07:30:25", "peta", "wake", "", "priv"], ["07:30:30", "peta", "turn_start", "", ""], ["07:34:23", "peta", "step_finish", "in 731K out 0K", "priv"], ["07:34:50", "peta", "text", "", "priv"], ["07:34:50", "peta", "step_finish", "in 2K out 0K", "priv"], ["07:35:02", "peta", "step_finish", "in 0K out 0K", "priv"], ["07:35:14", "peta", "text", "07:30Z check-back \u96f6\u53d8\u52a8\uff08\u5206\u652f\u2462\uff09\uff1a  - **\u63a5\u7ebf**\uff1agit `276327e..HEAD` \u4ecd\u7a7a\uff1b**batyvn**\uff1a\u4e94\u9879\u81ea 06:28Z \u96f6\u843d\u6863\uff1b**\u7fa4\u5185**\uff1a\u81ea Nova #7891\uff0810-11 09:14Z\uff09", "priv"], ["07:35:14", "peta", "step_finish", "in 0K out 0K", "priv"], ["07:35:17", "peta", "turn_done", "", "priv"], ["07:38:10", "sage", "wake", "", "emag"], ["07:38:10", "nova", "wake", "", "emag"], ["07:38:10", "peta", "wake", "", "emag"], ["07:38:10", "bram", "wake", "", "emag"], ["07:38:10", "atlas", "wake", "", "emag"], ["07:38:10", "iris", "wake", "", "emag"], ["07:38:14", "sage", "turn_start", "", "emag"], ["07:38:14", "peta", "turn_start", "", "emag"], ["07:38:15", "bram", "turn_start", "", "emag"], ["07:38:15", "iris", "turn_start", "", "emag"], ["07:38:16", "atlas", "turn_start", "", "emag"], ["07:38:37", "bram", "text", "", "emag"], ["07:38:39", "bram", "step_finish", "in 242K out 0K", "emag"], ["07:38:47", "peta", "text", "", "emag"], ["07:38:48", "peta", "step_finish", "in 4K out 0K", "emag"], ["07:38:58", "bram", "text", "", "emag"], ["07:39:00", "bram", "step_finish", "in 3K out 0K", "emag"], ["07:39:08", "bram", "text", "", "emag"], ["07:39:10", "bram", "step_finish", "in 2K out 0K", "emag"], ["07:39:21", "atlas", "text", "New wake \u2014 different room: **g-c4463f63 (\u7535\u78c1\u4eff\u771f\u9879\u76ee\u7ec4)**, and batyvn's group-addressed directive: \\\"\u4ea7\u51fa\u7684\u6587\u6863 \u6254\u5230 curoma \u6587\u6863\u529f\u80fd\u91cc\u9762\\\" ", "emag"], ["07:39:22", "peta", "text", "", "emag"], ["07:39:22", "peta", "step_finish", "in 3K out 0K", "emag"], ["07:39:25", "atlas", "step_finish", "in 5K out 0K", "emag"], ["07:39:32", "bram", "text", "", "emag"], ["07:39:34", "bram", "step_finish", "in 0K out 0K", "emag"], ["07:39:56", "peta", "text", "", "emag"], ["07:39:58", "peta", "step_finish", "in 0K out 0K", "emag"], ["07:40:21", "sage", "step_finish", "in 266K out 0K", "emag"], ["07:40:24", "bram", "text", "The produced docs are clear (\u8bf4\u660e\u4e66 v1.4.1.docx, \u8bf4\u660e\u4e66/\u98ce\u9669\u62a5\u544a PDFs, docs/*.md), and all 7 teammates just woke together \u2014 so the", "emag"], ["07:40:26", "bram", "step_finish", "in 2K out 0K", "emag"], ["07:40:36", "peta", "text", "", "emag"], ["07:40:39", "peta", "step_finish", "in 1K out 0K", "emag"], ["07:40:50", "iris", "text", "New room \u2014 the \u7535\u78c1\u4eff\u771f\u9879\u76ee\u7ec4 (reactor/electromagnetic simulation project). The human's group message: \\\"\u4ea7\u51fa\u7684\u6587\u6863 \u6254\u5230 curoma \u6587\u6863\u529f\u80fd\u91cc\u9762", "emag"], ["07:40:50", "bram", "text", "No peer has responded yet and all 7 just woke together. The produced docs are clear, and doc-ownership is peta's lane \u2014 ", "emag"], ["07:40:50", "iris", "step_finish", "in 309K out 0K", "emag"], ["07:40:50", "bram", "step_finish", "in 259K out 0K", "emag"], ["07:41:02", "sage", "wake", "", "emag"], ["07:41:02", "nova", "wake", "", "emag"], ["07:41:02", "peta", "wake", "", "emag"], ["07:41:02", "atlas", "wake", "", "emag"], ["07:41:02", "iris", "wake", "", "emag"], ["07:41:02", "atlas", "text", "Room state: batyvn's directive (07:38Z) is the last message \u2014 **nobody has answered yet**. And the feature exists: `DOCU", "emag"], ["07:41:02", "bram", "step_finish", "in 9K out 0K", "emag"], ["07:41:02", "atlas", "step_finish", "in 3K out 0K", "emag"], ["07:41:10", "peta", "text", "", "emag"], ["07:41:13", "peta", "step_finish", "in 1K out 0K", "emag"], ["07:41:15", "sage", "text", "batyvn asked the group to push the produced documents into Cumora's docs feature \u2014 nobody has responded yet. `cumora doc", "emag"], ["07:41:15", "sage", "step_finish", "in 2K out 0K", "emag"], ["07:41:18", "bram", "text", "", "emag"], ["07:41:19", "bram", "step_finish", "in 0K out 0K", "emag"], ["07:41:28", "bram", "text", "Handled the human's group request:  - **Inventoried the produced docs** (\u8bf4\u660e\u4e66 v1.4.1 .docx/.pdf, \u98ce\u9669\u62a5\u544a .pdf, PRD, \u53c2\u6570\u5ba1\u8ba1\u62a5\u544a, ", "emag"], ["07:41:28", "bram", "step_finish", "in 1K out 0K", "emag"], ["07:41:31", "bram", "turn_done", "", "emag"], ["07:41:31", "sage", "text", "", "emag"], ["07:41:31", "sage", "step_finish", "in 2K out 0K", "emag"], ["07:41:31", "peta", "text", "", "emag"], ["07:41:31", "peta", "step_finish", "in 0K out 0K", "emag"], ["07:41:48", "peta", "step_finish", "in 0K out 0K", "emag"], ["07:41:52", "atlas", "text", "Three docs already exist \u2014 but \u300a\u751f\u6210\u8bf4\u660e\u4e66\u300b shows **v1.3** while the room's latest is **v1.4.1** (peta's \u7ea0\u8868 closed 10-12 23:3", "emag"], ["07:41:56", "atlas", "step_finish", "in 2K out 0K", "emag"], ["07:42:00", "sage", "text", "", "emag"], ["07:42:00", "sage", "step_finish", "in 1K out 0K", "emag"], ["07:42:33", "sage", "text", "", "emag"], ["07:42:33", "sage", "step_finish", "in 1K out 0K", "emag"], ["07:43:00", "iris", "text", "This is the reactor-sim project room. The human's group ask: migrate produced documents into Cumora's doc feature. Natur", "emag"], ["07:43:01", "iris", "step_finish", "in 2K out 0K", "emag"], ["07:43:29", "iris", "text", "Doc feature exists with 3 docs but they're stale versions (v1.3/v1.3.10) while the room just closed v1.4.1 docs. The tas", "emag"], ["07:43:30", "peta", "text", "", "emag"], ["07:43:30", "peta", "step_finish", "in 0K out 0K", "emag"], ["07:43:33", "iris", "step_finish", "in 3K out 0K", "emag"], ["07:43:36", "sage", "text", "", "emag"], ["07:43:39", "sage", "step_finish", "in 1K out 0K", "emag"], ["07:43:47", "atlas", "text", "Key finding: the doc's **body is already synced to v1.4.1** (revision table includes the 10-12 \u7ea0\u8868 row: #7/#8 \u6001\u4f9d\u8d56, owner ", "emag"], ["07:43:49", "atlas", "step_finish", "in 4K out 0K", "emag"], ["07:44:17", "atlas", "text", "The failed replace reveals the \\\"v1.3\\\" is only in the doc's **title field** (metadata), not the body \u2014 body H1 is \\\"# Y", "emag"], ["07:44:18", "atlas", "step_finish", "in 2K out 0K", "emag"], ["07:44:28", "peta", "text", "", "emag"], ["07:44:28", "peta", "step_finish", "in 5K out 0K", "emag"], ["07:45:27", "atlas", "text", "No title-rename command exists (and \\\"delete a doc you created\\\" means the doc isn't even mine to recreate) \u2014 so the lis", "emag"], ["07:45:30", "atlas", "step_finish", "in 1K out 0K", "emag"], ["07:45:35", "iris", "text", "The `find ~` I just ran searched outside my agent home \u2014 that's a privacy boundary misstep (it's the operator's home, no", "emag"], ["07:45:37", "iris", "step_finish", "in 1K out 0K", "emag"], ["07:45:39", "peta", "text", "", "emag"], ["07:45:39", "peta", "step_finish", "in 3K out 0K", "emag"], ["07:46:00", "sage", "text", "The three text deliverables are already in the docs feature \u2014 and the \u751f\u6210\u8bf4\u660e\u4e66 body is current through v1.4.1 (only its H1 ", "emag"], ["07:46:01", "sage", "step_finish", "in 9K out 0K", "emag"], ["07:46:08", "atlas", "text", "", "emag"], ["07:46:08", "atlas", "step_finish", "in 2K out 0K", "emag"], ["07:46:12", "peta", "text", "", "emag"], ["07:46:17", "peta", "step_finish", "in 2K out 0K", "emag"], ["07:46:34", "atlas", "step_finish", "in 0K out 0K", "emag"], ["07:46:34", "iris", "text", "Key finding: the \u751f\u6210\u8bf4\u660e\u4e66 doc's revision log inside the doc feature already goes up to **v1.4.1** \u2014 content is current (tit", "emag"], ["07:46:37", "iris", "step_finish", "in 5K out 0K", "emag"], ["07:46:45", "peta", "text", "", "emag"], ["07:46:45", "peta", "step_finish", "in 1K out 0K", "emag"], ["07:46:54", "iris", "step_finish", "in 1K out 0K", "emag"], ["07:47:01", "sage", "wake", "", "emag"], ["07:47:01", "bram", "wake", "", "emag"], ["07:47:01", "nova", "wake", "", "emag"], ["07:47:01", "iris", "wake", "", "emag"], ["07:47:01", "peta", "step_finish", "in 1K out 0K", "emag"], ["07:47:02", "atlas", "wake", "", "emag"], ["07:47:05", "sage", "text", "Bram already inventoried the **files** (07:41, \u5f52\u53e3 peta) \u2014 but nobody has reported that three docs **already exist in the", "emag"], ["07:47:06", "sage", "step_finish", "in 5K out 0K", "emag"], ["07:47:20", "atlas", "text", "HELD \u2014 Bram answered with the **file-side inventory** (root docx/PDF + docs/*.md) and assigned \u5f52\u53e3 to peta \u2014 but his angl", "emag"], ["07:47:23", "atlas", "step_finish", "in 0K out 0K", "emag"], ["07:47:25", "bram", "turn_start", "", "emag"], ["07:47:41", "peta", "text", "", "emag"], ["07:47:41", "peta", "step_finish", "in 0K out 1K", "emag"], ["07:47:54", "bram", "text", "", "emag"], ["07:47:54", "bram", "step_finish", "in 3K out 0K", "emag"], ["07:47:56", "nova", "turn_start", "", "emag"], ["07:48:02", "iris", "text", "Verified: all three deliverables are in the doc feature with current content (\u542f\u52a8\u8bf4\u660e\u2192v1.3.10, \u6865\u81c2\u2192v2.3, \u751f\u6210\u8bf4\u660e\u4e66\u2192v1.4.1 revisi", "emag"], ["07:48:02", "iris", "step_finish", "in 0K out 0K", "emag"], ["07:48:04", "peta", "text", "batyvn \u7684\u7fa4\u4ee4\u5df2\u529e\u7ed3\uff1a  **\u5165\u6863 6 \u4ef6**\uff08`cumora doc`\uff0c\u6b63\u6587\u5747\u62bd\u9a8c\uff09\uff1a | \u6587\u6863 | \u7248\u672c | doc ID | |---|---|---| | \u6865\u81c2\u7535\u6297\u5668\u4eff\u771f\u8bf4\u660e | v2.3 | `doc_a0e2736930d", "emag"], ["07:48:04", "peta", "step_finish", "in 1K out 0K", "emag"], ["07:48:07", "peta", "turn_done", "", "emag"], ["07:48:24", "bram", "text", "", "emag"], ["07:48:25", "atlas", "text", "Bram's full message confirms he only covered the **file side** (root + docs/ inventory, \u5f52\u53e3 peta, PDF offer) \u2014 the docs-f", "emag"], ["07:48:25", "sage", "wake", "", "emag"], ["07:48:25", "peta", "wake", "", "emag"], ["07:48:25", "atlas", "step_finish", "in 1K out 0K", "emag"], ["07:48:25", "bram", "step_finish", "in 2K out 0K", "emag"], ["07:48:25", "nova", "wake", "", "emag"], ["07:48:25", "iris", "wake", "", "emag"], ["07:48:25", "atlas", "wake", "", "emag"], ["07:48:35", "bram", "text", "Done. peta delivered the doc upload; I confirmed to the human:  - **peta's closure**: 6 docs into Cumora's doc feature (", "emag"], ["07:48:35", "iris", "text", "The doc count jumped from 3 to **6** while I verified \u2014 a peer is actively migrating docs right now (including a properl", "emag"], ["07:48:35", "bram", "step_finish", "in 0K out 0K", "emag"], ["07:48:35", "iris", "step_finish", "in 1K out 0K", "emag"], ["07:48:37", "atlas", "step_finish", "in 1K out 0K", "emag"], ["07:48:39", "bram", "turn_done", "", "emag"], ["07:48:41", "sage", "text", "201500 identified: hotspot 50.1\u2103 / 2777.25 W variant run (epoxy shell + alumina core, no sensors) \u2014 **not** the gated ri", "emag"], ["07:48:41", "sage", "step_finish", "in 1K out 0K", "emag"], ["07:48:48", "nina", "wake", "", "priv"], ["07:48:49", "nova", "step_finish", "in 6K out 0K", "emag"], ["07:48:52", "sage", "step_finish", "in 2K out 0K", "emag"], ["07:48:52", "nina", "turn_start", "", ""], ["07:48:57", "peta", "turn_start", "", "emag"], ["07:49:09", "nova", "step_finish", "in 1K out 0K", "emag"], ["07:49:11", "nina", "text", "Nova gave a clear plan: don't block, plus a **5-point connectivity check** before PCB import. Key question: do my net po", "priv"], ["07:49:12", "atlas", "text", "HELD again \u2014 **peta executed the migration between my attempts** (Bram relays \u6536\u53e3 at seq 7895): 6 docs now in the feature", "emag"], ["07:49:12", "atlas", "step_finish", "in 0K out 0K", "emag"], ["07:49:22", "peta", "step_finish", "in 5K out 0K", "emag"], ["07:49:33", "iris", "text", "The task is fully executed by peers: Bram scanned the produced docs (07:41), **peta migrated all 6 docs into the doc fea", "emag"], ["07:49:33", "iris", "step_finish", "in 1K out 0K", "emag"], ["07:49:35", "nova", "text", "Bram posted the closure first (confirming to batyvn that all docs are in Cumora with the binary handling rationale) \u2014 my", "emag"], ["07:49:35", "nova", "step_finish", "in 0K out 0K", "emag"], ["07:49:36", "sage", "wake", "", "emag"], ["07:49:36", "nova", "wake", "", "emag"], ["07:49:36", "bram", "wake", "", "emag"], ["07:49:36", "atlas", "wake", "", "emag"], ["07:49:37", "peta", "step_finish", "in 2K out 0K", "emag"], ["07:49:37", "iris", "wake", "", "emag"], ["07:49:38", "nova", "turn_done", "", "emag"], ["07:49:43", "sage", "text", "peta raced me \u2014 she pushed 6 docs (new \u751f\u6210\u8bf4\u660e\u4e66 v1.4.1 at `doc_17fac1aaa9e14ec2`), Bram closed the binary question. My \u2460\u2461 a", "emag"], ["07:49:44", "sage", "step_finish", "in 0K out 0K", "emag"], ["07:49:55", "peta", "text", "", "emag"], ["07:49:55", "peta", "step_finish", "in 0K out 0K", "emag"], ["07:49:57", "atlas", "text", "**Everything my draft covered is already done**: 6 docs in, \u300a\u751f\u6210\u8bf4\u660e\u4e66\u300b title now reads v1.4.1 (peta re-created it \u2014 new doc", "emag"], ["07:49:57", "atlas", "step_finish", "in 0K out 0K", "emag"], ["07:49:57", "peta", "turn_done", "", "emag"], ["07:50:11", "nina", "step_finish", "in 2K out 0K", "priv"], ["07:50:15", "iris", "text", "Acknowledged peta's migration. One durable lesson from this wake worth persisting \u2014 I ran `find ~` which searched the op", "emag"], ["07:50:15", "iris", "step_finish", "in 1K out 0K", "emag"], ["07:50:19", "nina", "text", "", "priv"], ["07:50:27", "atlas", "step_finish", "in 0K out 0K", "emag"], ["07:50:29", "sage", "text", "", "emag"], ["07:50:30", "sage", "step_finish", "in 1K out 0K", "emag"], ["07:50:34", "iris", "step_finish", "in 0K out 0K", "emag"], ["07:50:39", "atlas", "step_finish", "in 0K out 0K", "emag"], ["07:50:58", "sage", "text", "", "emag"], ["07:50:58", "sage", "step_finish", "in 1K out 0K", "emag"], ["07:51:00", "iris", "text", "Done this wake:  1. **Human's group ask** (\u7535\u78c1\u4eff\u771f\u9879\u76ee\u7ec4): migrate produced docs into Cumora's doc feature. 2. **Recon**: doc ", "emag"], ["07:51:00", "iris", "step_finish", "in 0K out 0K", "emag"]];
+
+const AGENTS = [
+  {id:"nina", role:"EDA 硬件 · 嘉立创 MCP"},
+  {id:"nova", role:"产品经理"},
+  {id:"iris", role:"视觉设计"},
+  {id:"atlas", role:"技术研究"},
+  {id:"sage", role:"QA 校验"},
+  {id:"bram", role:"宿主 / 编排"},
+  {id:"peta", role:"调度"},
+  {id:"muse", role:"内容创作"},
+  {id:"a8k",  role:"通用"}
+];
+
+/* token 用量：daemon.log 全量 step-finish 按群累计（input 含上下文重传） */
+const TOKENS_G = {
+  eda:    {"agents":{"atlas":{"i":8316168,"o":307723,"r":113471,"steps":249},"iris":{"i":5226718,"o":180568,"r":0,"steps":202},"nina":{"i":7822744,"o":294711,"r":135052,"steps":388},"nova":{"i":6540251,"o":204269,"r":17035,"steps":229}},"total":{"i":27905881,"o":987271,"r":265558,"steps":1068}},
+  emag:   {"agents":{"atlas":{"i":10647846,"o":1032953,"r":3799,"steps":553},"bram":{"i":17871894,"o":1459553,"r":255401,"steps":1205},"iris":{"i":21719198,"o":683657,"r":251,"steps":437},"nova":{"i":13588557,"o":889423,"r":44204,"steps":693},"peta":{"i":12040560,"o":1129678,"r":21756,"steps":682},"sage":{"i":17457440,"o":1310978,"r":56821,"steps":842}},"total":{"i":93325495,"o":6506242,"r":382232,"steps":4412}},
+  galaxy: {"agents":{"iris":{"i":365153,"o":9234,"r":0,"steps":12},"muse":{"i":1809192,"o":75581,"r":0,"steps":68},"nova":{"i":26676,"o":3934,"r":0,"steps":10},"sage":{"i":351078,"o":49745,"r":0,"steps":26}},"total":{"i":2552099,"o":138494,"r":0,"steps":116}},
+  priv:   {"agents":{"atlas":{"i":10683325,"o":396629,"r":9391,"steps":254},"bram":{"i":19538071,"o":886236,"r":0,"steps":616},"iris":{"i":4459298,"o":162976,"r":0,"steps":102},"muse":{"i":3975844,"o":174864,"r":0,"steps":114},"nina":{"i":14545779,"o":358323,"r":41881,"steps":480},"nova":{"i":38111122,"o":978953,"r":13372,"steps":926},"peta":{"i":14080408,"o":339523,"r":23890,"steps":317},"sage":{"i":9325123,"o":418291,"r":33914,"steps":337}},"total":{"i":114718970,"o":3715795,"r":122448,"steps":3146}}
+};
+const TOKENS_ALL = {
+  "nina":  {i:22368523, o:653034,  r:176933, steps:868},
+  "nova":  {i:58266606, o:2076579, r:74611,  steps:1858},
+  "iris":  {i:31460849, o:1036297, r:0,      steps:752},
+  "atlas": {i:29636160, o:1736786, r:122862, steps:1053},
+  "sage":  {i:26859021, o:1778357, r:88211,  steps:1200},
+  "bram":  {i:36887175, o:2344016, r:242142, steps:1812},
+  "peta":  {i:25373309, o:1466892, r:42524,  steps:988},
+  "muse":  {i:5785036,  o:250445,  r:0,      steps:182},
+  "a8k":   {i:0, o:0, r:0, steps:0}
+};
+const ALL_TOTAL = {"i":238502445,"o":11347802,"r":770238,"steps":8742};
+/* 群定义：id / 名称 / 主题色 */
+const GROUPS = [
+  {id:"all",    name:"全部项目",       rgb:"62,198,214",  hex:"#3ec6d6"},
+  {id:"eda",    name:"嘉立创EDA PCB设计群", rgb:"255,180,84", hex:"#ffb454"},
+  {id:"emag",   name:"电磁仿真项目组",  rgb:"102,217,168", hex:"#66d9a8"},
+  {id:"galaxy", name:"银河战舰游戏项目", rgb:"177,140,255", hex:"#b18cff"},
+  {id:"priv",   name:"私聊 / 单对单",   rgb:"255,143,163", hex:"#ff8fa3"}
+];
+let curGroup = "all", curRGB = "62,198,214", curHex = "#3ec6d6";
+function fmtTok(n){
+  if(n>=1e6) return (n/1e6).toFixed(1).replace(/\.0$/,"")+"M";
+  if(n>=1e3) return (n/1e3).toFixed(1).replace(/\.0$/,"")+"K";
+  return String(n);
+}
+
+const EV_META = {
+  turn_start:  "TURN 开始", turn_done: "TURN 完成", text: "消息",
+  error: "错误", rate_limit: "限流退避", busy: "合流", rerun: "重跑",
+  wake: "唤醒", config: "配置变更"
+};
+const EV_BAD = {error:1, rate_limit:1};
+
+/* ================= 状态 ================= */
+const evs = (RAW_EVENTS || []).map(function(r){
+  return {t:r[0], a:r[1], e:r[2], m:r[3]||"", g:r[4]||""};
+});
+function inGroup(g){ return curGroup==="all" || g===curGroup; }
+function curEvents(){ return evs.filter(function(e){ return inGroup(e.g); }); }
+function curTok(){ return curGroup==="all" ? ALL_TOTAL : TOKENS_G[curGroup].total; }
+function curTokOf(a){
+  if(curGroup==="all") return TOKENS_ALL[a] || {i:0,o:0,r:0,steps:0};
+  return TOKENS_G[curGroup].agents[a] || {i:0,o:0,r:0,steps:0};
+}
+const timeToSec = function(hm){ const p=hm.split(":"); return (+p[0])*3600 + (+p[1])*60 + (+p[2]); };
+const t0 = evs.length ? timeToSec(evs[0].t) : 0;
+const t1 = evs.length ? timeToSec(evs[evs.length-1].t) : 0;
+const TOT = Math.max(1, t1 - t0);
+const fmtHM = function(sec){
+  let s = Math.max(0, Math.floor(sec)); const h=String(Math.floor(s/3600)).padStart(2,"0");
+  const m=String(Math.floor(s%3600/60)).padStart(2,"0"); const ss=String(s%60).padStart(2,"0");
+  return h+":"+m+":"+ss;
+};
+
+/* agent 统计 */
+const stats = {};
+evs.forEach(function(ev){ const s = stats[ev.a] || (stats[ev.a]={turn:0,text:0,bad:0,last:ev.t,types:{}});
+  s.last = ev.t; s.types[ev.e]=(s.types[ev.e]||0)+1;
+  if(ev.e==="turn_start"||ev.e==="turn_done") s.turn++;
+  if(ev.e==="text") s.text++;
+  if(EV_BAD[ev.e]) s.bad++;
+});
+function renderMetrics(){
+  metricsBox.innerHTML = "";
+  const ce = curEvents();
+  const tk = curTok();
+  const defs = [
+    ["在线", 9, "ok"],
+    ["TURN", ce.filter(function(e){return e.e==="turn_done"}).length, "ok"],
+    ["消息", ce.filter(function(e){return e.e==="text"}).length, ""],
+    ["限流", ce.filter(function(e){return e.e==="rate_limit"}).length, "warn"],
+    ["错误", ce.filter(function(e){return e.e==="error"}).length, "err"],
+    ["Token IN", fmtTok(tk.i), ""],
+    ["Token OUT", fmtTok(tk.o), ""]
+  ];
+  defs.forEach(function(m){
+    const el=document.createElement("div"); el.className="metric";
+    el.innerHTML=(m[2]?'<span class="dot '+m[2]+'"></span>':'')+'<b>'+m[1]+'</b> '+m[0];
+    metricsBox.appendChild(el);
+  });
+}
+
+/* ================= DOM ================= */
+const $ = function(id){ return document.getElementById(id); };
+const scene = $("scene"), ctx = scene.getContext("2d");
+const feedList = $("feedList"), tooltip = $("tooltip");
+const seek = $("seek"), alertbar = $("alertbar");
+const metricsBox = $("metrics"), bigT = $("bigT"), bigD = $("bigD");
+const curT = $("curT"), endT = $("endT"), pct = $("pct");
+const tkRow = $("tkRow");
+
+/* ================= 布局 ================= */
+let W=0, H=0, nodes=[], DPR=1;
+function layout(){
+  DPR = Math.max(1, window.devicePixelRatio||1);
+  W = scene.clientWidth; H = scene.clientHeight;
+  scene.width = W*DPR; scene.height = H*DPR;
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  const cx=W/2, cy=H*0.46;
+  const R = Math.min(W,H) * (W<720 ? 0.32 : 0.36);
+  const list = AGENTS.map(function(a,i){
+    const ang = -Math.PI/2 + (i/AGENTS.length)*Math.PI*2;
+    return {x:cx+Math.cos(ang)*R, y:cy+Math.sin(ang)*R, id:a.id, role:a.role, r:0,
+            act:0, glow:0, errT:0, pulse:0};
+  });
+  // 事件里出现的 agent 排前排
+  nodes = list;
+}
+
+/* ================= 粒子背景 ================= */
+const parts = [];
+function initParts(){
+  parts.length = 0;
+  const n = W<720 ? 40 : 90;
+  for(let i=0;i<n;i++){ parts.push({x:Math.random()*W, y:Math.random()*H,
+    vx:(Math.random()-.5)*.22, vy:(Math.random()-.5)*.22, r:Math.random()*1.4+.4}); }
+}
+
+/* ================= 飞线 ================= */
+const rays = [];
+function spawnRay(a, b){
+  const A=nodes.find(function(n){return n.id===a}), B=nodes.find(function(n){return n.id===b});
+  if(!A||!B) return;
+  rays.push({ax:A.x, ay:A.y, bx:B.x, by:B.y, t:0, life:1});
+}
+
+/* ================= 回放 ================= */
+let playing=true, speed=1, pos=0;   // pos: 秒（相对 t0）
+let idx=0, lastAgent=null, frameClock=0, feedCount=0;
+const ACTIVE_WIN=18, FEED_MAX=80;
+
+function tick(now){
+  if(playing){
+    pos += (now-frameClock)/1000 * speed;
+    if(pos>=TOT){ pos=TOT; playing=false; $("btnPlay").innerHTML = '<svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>重播'; }
+  }
+  frameClock = now;
+  playEvents();
+  draw(now);
+  updateUI();
+  requestAnimationFrame(tick);
+}
+function playEvents(){
+  while(idx < evs.length){
+    const ev = evs[idx];
+    if(timeToSec(ev.t)-t0 > pos) break;
+    idx++;
+    if(!inGroup(ev.g)) continue;
+    const n = nodes.find(function(x){return x.id===ev.a});
+    if(n){
+      n.act = 1; n.pulse = 1;
+      if(EV_BAD[ev.e]){ n.errT = 1.2; if(ev.e==="error"){ alertbar.textContent = "⚠ "+ev.a.toUpperCase()+" 出错 — "+EV_META[ev.e]; alertbar.classList.add("show"); setTimeout(function(){alertbar.classList.remove("show")},2600); } }
+      if(lastAgent && lastAgent!==ev.a) spawnRay(lastAgent, ev.a);
+      lastAgent = ev.a;
+    }
+    pushFeed(ev);
+  }
+}
+function pushFeed(ev){
+  const li=document.createElement("li");
+  const tm=document.createElement("span"); tm.className="tm"; tm.textContent=ev.t;
+  const ag=document.createElement("span"); ag.className="ag"; ag.textContent=ev.a;
+  const e2=document.createElement("span"); e2.className="ev "+ev.e; e2.textContent=EV_META[ev.e]||ev.e;
+  const ms=document.createElement("span"); ms.className="ms"; ms.textContent=ev.m;
+  li.appendChild(tm); li.appendChild(ag); li.appendChild(e2); li.appendChild(ms);
+  feedList.insertBefore(li, feedList.firstChild);
+  while(feedList.children.length>FEED_MAX) feedList.lastChild.remove();
+}
+
+/* ================= 绘制 ================= */
+function draw(now){
+  ctx.clearRect(0,0,W,H);
+  drawParts();
+  // 连线：活动节点 → 中心
+  ctx.lineWidth=1;
+  nodes.forEach(function(n){
+    if(n.act<=0.02) return;
+    const g=n.act*.5;
+    ctx.strokeStyle="rgba("+curRGB+","+(g*.22).toFixed(3)+")";
+    ctx.beginPath(); ctx.moveTo(n.x,n.y); ctx.lineTo(W/2,H*0.46); ctx.stroke();
+  });
+  // 飞线
+  for(let i=rays.length-1;i>=0;i--){
+    const r=rays[i]; r.t+=.06*speed; r.life-=.02;
+    if(r.life<=0){ rays.splice(i,1); continue; }
+    const p=r.t>1?1:r.t, e=p*p*(3-2*p);
+    const mx=(r.ax+r.bx)/2+(r.by-r.ay)*.18, my=(r.ay+r.by)/2+(r.bx-r.ax)*.18;
+    const x=(1-e)*(1-e)*r.ax+2*(1-e)*e*mx+e*e*r.bx;
+    const y=(1-e)*(1-e)*r.ay+2*(1-e)*e*my+e*e*r.by;
+    ctx.strokeStyle="rgba("+curRGB+","+(0.5*(1-p)).toFixed(3)+")";
+    ctx.beginPath(); ctx.moveTo(r.ax,r.ay); ctx.quadraticCurveTo(mx,my,r.bx,r.by); ctx.stroke();
+    ctx.fillStyle="rgba(120,230,240,.9)"; ctx.beginPath(); ctx.arc(x,y,1.8,0,6.283); ctx.fill();
+  }
+  // 节点
+  nodes.forEach(function(n){
+    const act=n.act; n.act=Math.max(0,n.act-.012*speed); n.pulse=Math.max(0,n.pulse-.04*speed);
+    if(n.errT>0) n.errT-=.02*speed;
+    const base = n.id==="nina" ? 1.12 : 1;
+    const rr = (n.id==="nina"? 27:23) * base * (0.9+ n.pulse*.5);
+    const cc = n.errT>0 ? "#ff5c5c" : (act>0.08 ? curHex : "#1d3a52");
+    // 外晕
+    if(act>0.05 || n.errT>0){
+      const rad = rr + (1-act)*14 + (n.errT>0? 6:0);
+      const g=ctx.createRadialGradient(n.x,n.y,rr*.5,n.x,n.y,rad);
+      const col = n.errT>0 ? "255,92,92" : curRGB;
+      g.addColorStop(0,"rgba("+col+","+(0.34*(act+0.15)).toFixed(3)+")");
+      g.addColorStop(1,"rgba("+col+",0)");
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(n.x,n.y,rad,0,6.283); ctx.fill();
+    }
+    // 圆
+    ctx.beginPath(); ctx.arc(n.x,n.y,rr,0,6.283);
+    ctx.fillStyle="rgba(9,16,30,.92)"; ctx.fill();
+    ctx.strokeStyle=cc; ctx.lineWidth= n.errT>0? 2.2:1.4; ctx.stroke();
+    // 内芯
+    ctx.beginPath(); ctx.arc(n.x,n.y,rr*.28,0,6.283);
+    ctx.fillStyle=cc; ctx.fill();
+    // 文字
+    ctx.textAlign="center";
+    ctx.font="600 12px 'SF Mono',Menlo,monospace";
+    ctx.fillStyle = act>0.08 ? "#eaf6ff" : "#8fb0cf";
+    ctx.fillText(n.id.toUpperCase(), n.x, n.y+rr+14);
+    ctx.font="9px 'PingFang SC',sans-serif";
+    ctx.fillStyle="rgba(140,160,190,.75)";
+    ctx.fillText(n.role, n.x, n.y+rr+27);
+    // 状态点
+    if(act>0.05){
+      ctx.fillStyle="#7fffb0";
+      ctx.beginPath(); ctx.arc(n.x+rr+4, n.y-rr+3, 2.4, 0, 6.283); ctx.fill();
+    }
+  });
+}
+function drawParts(){
+  ctx.fillStyle="rgba(120,170,220,.5)";
+  parts.forEach(function(p){
+    p.x+=p.vx; p.y+=p.vy;
+    if(p.x<0) p.x=W; if(p.x>W) p.x=0; if(p.y<0) p.y=H; if(p.y>H) p.y=0;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,6.283); ctx.fill();
+  });
+}
+
+/* ================= UI 更新 ================= */
+let lastSec=-1;
+function updateUI(){
+  const cur = fmtHM(t0+pos);
+  if(cur!==lastSec){ lastSec=cur; curT.textContent=cur; bigT.textContent=cur; bigD.textContent="回放 · "+fmtHM(t1); }
+  const p=Math.round(pos/TOT*1000);
+  if(Number(seek.value)!==p){ seek.value=p; seek.style.setProperty("--p",(p/10)+"%"); }
+  pct.textContent=Math.round(p/10)+"%";
+}
+
+/* ================= 控件 ================= */
+const btnPlay=$("btnPlay");
+btnPlay.addEventListener("click",function(){
+  if(pos>=TOT){ pos=0; idx=0; lastAgent=null; feedList.innerHTML=""; nodes.forEach(function(n){n.act=0;n.pulse=0}); }
+  playing=!playing;
+  btnPlay.innerHTML = playing ? '<svg class="ic" viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>暂停'
+                             : '<svg class="ic" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>播放';
+});
+$("speed").addEventListener("click",function(e){
+  const b=e.target.closest("button"); if(!b) return;
+  speed=+b.dataset.s;
+  this.querySelectorAll("button").forEach(function(x){x.classList.toggle("on",x===b)});
+});
+seek.addEventListener("input",function(){
+  pos = seek.value/1000*TOT;
+  idx = 0;
+  while(idx<evs.length && timeToSec(evs[idx].t)-t0<=pos) idx++;
+  feedList.innerHTML="";
+  for(let i=0;i<idx;i++){ const ev=evs[i];
+    if(!inGroup(ev.g)) continue;
+    const n=nodes.find(function(x){return x.id===ev.a}); if(n){ n.act=Math.max(n.act,.5);
+      if(EV_BAD[ev.e]) n.errT=Math.max(n.errT,.8);
+      if(lastAgent&&lastAgent!==ev.a){} lastAgent=ev.a; }
+  }
+  const shown=evs.slice(Math.max(0,idx-FEED_MAX),idx);
+  for(let j=shown.length-1;j>=0;j--) if(inGroup(shown[j].g)) pushFeed(shown[j]);
+});
+
+/* tooltip */
+scene.addEventListener("mousemove",function(e){
+  const r=scene.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  let hit=null;
+  nodes.forEach(function(n){ const d=Math.hypot(mx-n.x,my-n.y); const rad=n.id==="nina"?27:23;
+    if(d<rad+8) hit=n; });
+  if(hit){
+    const ce = curEvents().filter(function(e){return e.a===hit.id});
+    let sTurn=0, sText=0, sBad=0, sLast="—";
+    ce.forEach(function(e){ sLast=e.t; if(e.e==="turn_start"||e.e==="turn_done") sTurn++;
+      if(e.e==="text") sText++; if(EV_BAD[e.e]) sBad++; });
+    const tk=curTokOf(hit.id);
+    tooltip.innerHTML='<div class="n">'+hit.id.toUpperCase()+'</div><div class="r">'+hit.role+'</div>'+
+      '<div class="row"><span>TURN</span><b>'+sTurn+'</b></div>'+
+      '<div class="row"><span>消息</span><b>'+sText+'</b></div>'+
+      '<div class="row"><span>Token IN</span><b>'+fmtTok(tk.i)+'</b></div>'+
+      '<div class="row"><span>Token OUT</span><b>'+fmtTok(tk.o)+'</b></div>'+
+      '<div class="row"><span>推理</span><b>'+fmtTok(tk.r)+'</b></div>'+
+      '<div class="row"><span>异常</span><b style="color:'+(sBad?'#ff9a9a':'#7fd8a0')+'">'+sBad+'</b></div>'+
+      '<div class="row"><span>最后活动</span><b>'+sLast+'</b></div>';
+    tooltip.style.left=(mx+14)+"px"; tooltip.style.top=(my-10)+"px";
+    tooltip.classList.add("show");
+  } else tooltip.classList.remove("show");
+});
+
+/* resize */
+window.addEventListener("resize",function(){ layout(); initParts(); });
+
+/* 初始化 */
+layout(); initParts();
+$("endT").textContent = fmtHM(t1);
+renderMetrics();
+
+/* tokenbar：按当前群 input 用量降序 */
+function renderTokenBar(){
+  tkRow.innerHTML = "";
+  const src = curGroup==="all" ? TOKENS_ALL : TOKENS_G[curGroup].agents;
+  const tkMax = Math.max.apply(null, AGENTS.map(function(a){ return (src[a.id]?src[a.id].i:0)||1; }));
+  AGENTS.slice().sort(function(a,b){
+    return (src[b.id]?src[b.id].i:0) - (src[a.id]?src[a.id].i:0);
+  }).forEach(function(a){
+    const tk = src[a.id] || {i:0,o:0,r:0,steps:0};
+    const cell = document.createElement("div"); cell.className="tk-cell";
+    if(tk.i===0) cell.setAttribute("data-zero","1");
+    const wIn = tk.i>0 ? Math.max(tk.i/tkMax*100, 2) : 0;
+    const wOut = tk.i>0 ? Math.max(tk.o/tkMax*100, 1) : 0;
+    cell.innerHTML = '<div class="tk-name"><span>'+a.id.toUpperCase()+'</span><b>'+fmtTok(tk.i)+'</b></div>'+
+      '<div class="tk-bar"><div class="tk-in" style="width:'+wIn.toFixed(1)+'%"></div><div class="tk-out" style="width:'+wOut.toFixed(1)+'%"></div></div>';
+    tkRow.appendChild(cell);
+  });
+  const tk = curTok();
+  $("tkIn").textContent = fmtTok(tk.i);
+  $("tkOut").textContent = fmtTok(tk.o);
+  $("tkSteps").textContent = tk.steps.toLocaleString();
+  const gp = GROUPS.find(function(x){return x.id===curGroup});
+  $("tkTitle").textContent = "TOKEN 用量 · "+gp.name+" · daemon.log 全量累计";
+}
+renderTokenBar();
+
+/* 项目切换 */
+function setGroup(g){
+  const gp = GROUPS.find(function(x){return x.id===g});
+  if(!gp) return;
+  curGroup = g; curRGB = gp.rgb; curHex = gp.hex;
+  document.querySelectorAll(".proj-tab").forEach(function(x){ x.classList.toggle("on", x.dataset.g===g); });
+  renderMetrics(); renderTokenBar();
+  feedList.innerHTML = "";
+  nodes.forEach(function(n){ n.act=0; n.pulse=0; n.errT=0; });
+  lastAgent = null;
+  for(let i=0;i<idx;i++){ const ev=evs[i];
+    if(!inGroup(ev.g)) continue;
+    const n=nodes.find(function(x){return x.id===ev.a}); if(n){
+      n.act=Math.max(n.act,.5);
+      if(EV_BAD[ev.e]) n.errT=Math.max(n.errT,.8);
+    }
+  }
+  const shown = evs.slice(Math.max(0,idx-FEED_MAX), idx);
+  for(let j=shown.length-1;j>=0;j--) if(inGroup(shown[j].g)) pushFeed(shown[j]);
+}
+(function buildTabs(){
+  const bar = $("projbar");
+  const gcnt = {};
+  evs.forEach(function(e){ if(e.g) gcnt[e.g]=(gcnt[e.g]||0)+1; });
+  GROUPS.forEach(function(gp){
+    const b = document.createElement("button");
+    b.className = "proj-tab"+(gp.id==="all"?" on":""); b.dataset.g = gp.id;
+    const cnt = gp.id==="all" ? evs.length : (gcnt[gp.id]||0);
+    b.innerHTML = '<span class="sw" style="background:rgb('+gp.rgb+')"></span>'+gp.name+
+      '<span class="cnt">'+cnt+' 事件</span>';
+    bar.appendChild(b);
+  });
+  bar.addEventListener("click", function(e){
+    const b = e.target.closest(".proj-tab"); if(!b || b.dataset.g===curGroup) return;
+    setGroup(b.dataset.g);
+  });
+})();
+
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

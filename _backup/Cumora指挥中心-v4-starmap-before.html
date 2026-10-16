@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cumora 指挥中心 · 实时</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23070b14'/%3E%3Ccircle cx='16' cy='16' r='8' fill='none' stroke='%233ec6d6' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%233ec6d6'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#070d1a; --panel2:#0e1a30; --line:#1b2c48;
+  --text:#dbe6f6; --dim:#7d94b5; --cyan:#3ec6d6;
+  --mono:"SF Mono","JetBrains Mono","Menlo",monospace;
+  --sans:"PingFang SC","Helvetica Neue",system-ui,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;display:flex;flex-direction:column}
+body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;background:
+  radial-gradient(1200px 600px at 15% -10%,rgba(62,198,214,.08),transparent 60%),
+  radial-gradient(1000px 500px at 90% 110%,rgba(120,90,220,.07),transparent 60%),
+  repeating-linear-gradient(0deg,transparent 0 39px,rgba(120,160,220,.045) 39px 40px),
+  repeating-linear-gradient(90deg,transparent 0 39px,rgba(120,160,220,.045) 39px 40px)}
+header{flex:none;display:flex;align-items:center;gap:16px;padding:9px 20px;border-bottom:1px solid var(--line);background:rgba(9,16,30,.72);z-index:2;flex-wrap:wrap}
+.brand{font-size:15px;font-weight:700;letter-spacing:.14em;color:#e6eefc}
+.brand .sub{font-size:10px;color:var(--dim);letter-spacing:.08em;margin-top:2px;font-family:var(--mono)}
+.metrics{display:flex;gap:6px;flex:1;flex-wrap:wrap}
+.metric{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--dim);background:var(--panel2);border:1px solid var(--line);padding:4px 9px;border-radius:7px;font-family:var(--mono)}
+.metric b{color:var(--text);font-weight:600}
+.metric .dot{width:6px;height:6px;border-radius:50%}
+.dot.ok{background:#5fd39b}.dot.warn{background:#e3b341}.dot.err{background:#ff6b6b}
+.livepill{display:flex;align-items:center;gap:6px;font-size:11px;font-family:var(--mono);padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);color:var(--dim);white-space:nowrap}
+.livepill .ldot{width:7px;height:7px;border-radius:50%;background:#5a6b85}
+.livepill.on{color:#9ff0c4;border-color:rgba(95,211,155,.45)}
+.livepill.on .ldot{background:#5fd39b;box-shadow:0 0 8px #5fd39b}
+.livepill .ts{color:var(--dim);font-size:10px;margin-left:4px}
+.controls{display:flex;align-items:center;gap:8px}
+.controls button{border:1px solid var(--line);background:var(--panel2);color:var(--dim);font-size:11px;padding:5px 12px;border-radius:7px;cursor:pointer;font-family:var(--mono)}
+.controls button:hover{color:var(--cyan);border-color:var(--cyan)}
+/* ===== 项目栏 ===== */
+.projbar{flex:none;display:flex;gap:6px;padding:7px 20px;border-bottom:1px solid var(--line);background:rgba(9,16,30,.55);overflow-x:auto;scrollbar-width:thin;scrollbar-color:rgba(94,146,214,.4) transparent;z-index:2}
+.proj-tab{display:flex;align-items:center;gap:7px;padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:rgba(64,140,220,.05);color:var(--dim);font-size:11px;cursor:pointer;white-space:nowrap;flex:none}
+.proj-tab:hover{border-color:currentColor}
+.proj-tab .sw{width:7px;height:7px;border-radius:50%;flex:none}
+.proj-tab .cnt{font-size:10px;font-family:var(--mono);opacity:.75}
+.proj-tab.on{color:#e6eefc;background:rgba(62,198,214,.09);border-color:currentColor}
+.proj-tab.on .sw{box-shadow:0 0 8px currentColor}
+/* ===== 主区 ===== */
+main{flex:1;display:flex;min-height:0;position:relative;z-index:1}
+.graph-wrap{flex:1;position:relative;min-width:0}
+#scene{position:absolute;inset:0;width:100%;height:100%;display:block}
+.glegend{position:absolute;bottom:10px;left:14px;display:flex;gap:12px;font-size:10px;color:var(--dim);font-family:var(--mono)}
+.glegend i{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:4px;vertical-align:-1px}
+.gempty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#5a6b85;font-size:12px;font-family:var(--mono);letter-spacing:.1em}
+/* ===== 任务面板 ===== */
+.tasks{width:400px;flex:none;border-left:1px solid var(--line);background:rgba(10,17,32,.88);display:flex;flex-direction:column;min-height:0}
+.tk-head{flex:none;display:flex;justify-content:space-between;align-items:center;padding:9px 14px;border-bottom:1px solid var(--line);font-size:11px;color:var(--dim);font-family:var(--mono)}
+.tk-head b{color:var(--text)}
+#taskList{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:7px}
+.task{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:9px 11px;cursor:pointer;flex:none}
+.task:hover{border-color:rgba(94,146,214,.5)}
+.task .row1{display:flex;align-items:center;gap:7px}
+.task .st{width:8px;height:8px;border-radius:50%;flex:none}
+.task .st.run{background:#5fd39b;box-shadow:0 0 6px #5fd39b;animation:blink 1.6s infinite}
+.task .st.done{background:#5a8bff}
+.task .st.reset{background:#ff9a4d}
+@keyframes blink{50%{opacity:.45}}
+.task .ttl{font-size:12px;font-weight:600;color:#e6eefc;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task .meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:var(--dim);font-family:var(--mono)}
+.task .meta b{color:var(--text);font-weight:600}
+.task .arts{margin-top:6px;display:none;flex-direction:column;gap:3px}
+.task.open .arts{display:flex}
+.task .art{font-size:10px;color:#9fd2e8;font-family:var(--mono);background:rgba(62,198,214,.07);border:1px solid rgba(62,198,214,.2);border-radius:5px;padding:3px 7px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.task .tools{display:none;margin-top:6px;flex-wrap:wrap;gap:4px}
+.task.open .tools{display:flex}
+.task .tool{font-size:9px;font-family:var(--mono);color:var(--dim);background:rgba(120,140,180,.1);border:1px solid var(--line);padding:2px 6px;border-radius:4px}
+/* ===== 底部 ===== */
+.bottom{flex:none;border-top:1px solid var(--line);background:rgba(9,16,30,.8);z-index:2;display:flex;flex-direction:column;max-height:34%}
+.tokenbar{padding:7px 14px;border-bottom:1px solid var(--line)}
+.tk-row{display:flex;gap:8px;overflow-x:auto;margin-top:6px;padding-bottom:2px}
+.tk-cell{flex:1 1 90px;min-width:76px}
+.tk-name{display:flex;justify-content:space-between;font-size:9px;color:var(--dim);font-family:var(--mono);margin-bottom:3px}
+.tk-name b{color:var(--text);font-weight:600}
+.tk-bar{height:6px;border-radius:3px;background:rgba(94,146,214,.14);overflow:hidden;display:flex}
+.tk-in{background:var(--cyan);height:100%}
+.tk-out{background:rgba(255,180,84,.85);height:100%}
+.tk-cell[data-zero]{opacity:.35}
+.msgbar{padding:7px 14px 0;display:flex;flex-direction:column;min-height:0}
+.msgs{flex:1;overflow-y:auto;padding:4px 0 8px;display:flex;flex-direction:column;gap:4px}
+.msg{display:flex;gap:9px;padding:4px 6px;border-radius:6px;font-size:11px;line-height:1.55}
+.msg:hover{background:rgba(64,140,220,.06)}
+.msg .t{font-family:var(--mono);color:var(--dim);flex:none;padding-top:1px;font-size:10px}
+.msg .a{font-family:var(--mono);font-weight:700;flex:none;font-size:10px;padding-top:2px}
+.msg .tx{color:#c9d8ee;flex:1;min-width:0;cursor:pointer;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.msg.open .tx{-webkit-line-clamp:unset}
+.msg .g{flex:none;width:3px;border-radius:2px}
+@media (max-width:900px){
+  body{overflow:auto}
+  main{flex-direction:column;flex:none;height:auto}
+  .graph-wrap{height:300px;flex:none}
+  .tasks{width:100%;border-left:none;border-top:1px solid var(--line);height:340px}
+  .bottom{max-height:none}
+  .metrics{gap:4px}
+  .metric{padding:3px 7px;font-size:10px}
+  .projbar{padding:7px 12px;gap:5px}
+  .proj-tab{padding:5px 10px;font-size:10px}
+  header{gap:10px;padding:8px 12px}
+}
+@media (prefers-reduced-motion:reduce){.task .st.run{animation:none}}
+#fileHint{display:none;flex:none;align-items:center;gap:8px;padding:7px 20px;background:rgba(255,180,84,.1);border-bottom:1px solid rgba(255,180,84,.3);color:#ffd9a8;font-size:12px;z-index:2}
+#fileHint b{color:#ffb454;font-family:var(--mono)}
+@media (max-width:900px){#fileHint{padding:7px 12px;font-size:11px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">CUMORA 指挥中心<div class="sub">AGENT ORCHESTRATION // 实时 · 最近 4 小时窗口</div></div>
+  <div class="metrics" id="metrics"></div>
+  <div class="livepill" id="livepill"><span class="ldot"></span><span id="liveTxt">连接中</span><span class="ts" id="syncT"></span></div>
+  <div class="controls"><button id="btnPause">暂停动画</button></div>
+</header>
+
+<div class="projbar" id="projbar"></div>
+
+<div id="fileHint">实时数据源未连接 —— 请在浏览器打开 <b>http://127.0.0.1:8787/</b> 查看实时版（当前为离线状态）</div>
+
+<main>
+  <div class="graph-wrap">
+    <canvas id="scene"></canvas>
+    <div class="glegend"><span><i style="background:#5fd39b"></i>进行中</span><span><i style="background:#5a8bff"></i>已完成</span><span><i style="background:#5a6b85"></i>任务节点</span><span><i style="background:#ffd479;border-radius:50%"></i>BOSS</span><span style="border-left:1px solid var(--line);padding-left:12px"><i style="background:#ff4d5e"></i>@你 · 红线</span></div>
+    <div class="gempty" id="gempty">正在连接实时数据源…</div>
+  </div>
+  <aside class="tasks">
+    <div class="tk-head"><span>任务 · 最近 4 小时</span><b id="taskCnt">—</b></div>
+    <div id="taskList"></div>
+  </aside>
+</main>
+
+<div class="bottom">
+  <div class="tokenbar">
+    <div class="tk-head"><span class="l" id="tkTitle">TOKEN 用量 · 全部项目 · 全量累计</span><span class="r" id="tkTot">输入 0 · 输出 0 · 0 步</span></div>
+    <div class="tk-row" id="tkRow"></div>
+  </div>
+  <div class="msgbar">
+    <div class="tk-head"><span class="l">消息流 · 最近 4 小时 · 点击消息展开全文</span><span class="r" id="msgCnt">0 条</span></div>
+    <div class="msgs" id="msgList"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ================= 静态配置 ================= */
+const AGENTS = [
+  {id:"nina", role:"EDA 硬件 · 嘉立创", hex:"#ffb454"},
+  {id:"nova", role:"产品经理", hex:"#7fd8a0"},
+  {id:"iris", role:"前端 / 设计", hex:"#8fd0ff"},
+  {id:"atlas", role:"技术架构", hex:"#b18cff"},
+  {id:"sage", role:"QA 测试", hex:"#f0c674"},
+  {id:"bram", role:"运维 / 编排", hex:"#e78ac3"},
+  {id:"peta", role:"电商", hex:"#a9e06b"}
+];
+const GROUPS = [
+  {id:"all",    name:"全部项目",        rgb:"62,198,214",  hex:"#3ec6d6"},
+  {id:"eda",    name:"嘉立创EDA PCB设计群", rgb:"255,180,84",  hex:"#ffb454"},
+  {id:"emag",   name:"电磁仿真项目组",   rgb:"102,217,168", hex:"#66d9a8"},
+  {id:"galaxy", name:"银河战舰游戏项目", rgb:"177,140,255", hex:"#b18cff"},
+  {id:"priv",   name:"私聊 / 单对单",    rgb:"255,143,163", hex:"#ff8fa3"}
+];
+const $ = function(id){ return document.getElementById(id); };
+const scene = $("scene"), ctx = scene.getContext("2d");
+const metricsBox = $("metrics"), taskList = $("taskList"), msgList = $("msgList");
+const tkRow = $("tkRow"), projbar = $("projbar");
+
+/* ================= 状态 ================= */
+let S = null, curGroup = "all", curRGB = "62,198,214", curHex = "#3ec6d6";
+let pauseAni = false;
+
+function inG(g){ return curGroup === "all" || g === curGroup; }
+function curTok(){
+  if(!S) return {i:0,o:0,r:0,steps:0};
+  if(curGroup === "all") return S.all_total;
+  const g = S.tokens_g[curGroup]; return g ? g.total : {i:0,o:0,r:0,steps:0};
+}
+function curTokOf(a){
+  if(!S) return {i:0,o:0,r:0,steps:0};
+  if(curGroup === "all") return S.tokens_all[a] || {i:0,o:0,r:0,steps:0};
+  const g = S.tokens_g[curGroup];
+  return g && g.agents ? (g.agents[a] || {i:0,o:0,r:0,steps:0}) : {i:0,o:0,r:0,steps:0};
+}
+function curTasks(){ return (S ? S.tasks : []).filter(function(t){ return inG(t.group); }); }
+function curMsgs(){ return (S ? S.messages : []).filter(function(m){ return inG(m.g); }); }
+function fmtN(n){ return n>=1e6 ? (n/1e6).toFixed(1)+"M" : n>=1e3 ? (n/1e3).toFixed(1)+"K" : String(n||0); }
+function fmtDur(s){ return s>=60 ? Math.round(s/60)+"m"+(s%60?s%60:"") : Math.round(s)+"s"; }
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function shortPath(p){ const s = String(p); return s.length>46 ? "…"+s.slice(-45) : s; }
+
+/* ================= 渲染 ================= */
+function renderMetrics(){
+  metricsBox.innerHTML = "";
+  const tks = curTasks(), msgs = curMsgs(), tk = curTok();
+  const running = tks.filter(function(t){return t.status==="running"}).length;
+  const defs = [
+    ["在线", AGENTS.length, "ok"],
+    ["进行中", running, "ok"],
+    ["完成", S ? S.done_tasks : 0, ""],
+    ["消息", msgs.length, ""],
+    ["Token IN", fmtN(tk.i), ""],
+    ["Token OUT", fmtN(tk.o), ""]
+  ];
+  defs.forEach(function(m){
+    const el = document.createElement("div"); el.className = "metric";
+    el.innerHTML = (m[2] ? '<span class="dot '+m[2]+'"></span>' : "") + "<b>" + m[1] + "</b> " + m[0];
+    metricsBox.appendChild(el);
+  });
+  const gp = GROUPS.find(function(x){return x.id===curGroup});
+  $("tkTitle").textContent = "TOKEN 用量 · "+gp.name+" · 全量累计";
+  $("tkTot").textContent = "输入 "+fmtN(tk.i)+" · 输出 "+fmtN(tk.o)+" · "+(tk.steps||0).toLocaleString()+" 步";
+}
+
+function renderTokenBar(){
+  tkRow.innerHTML = "";
+  const src = curGroup === "all"
+    ? (S ? S.tokens_all : {})
+    : (S && S.tokens_g[curGroup] ? S.tokens_g[curGroup].agents : {});
+  const max = Math.max.apply(null, AGENTS.map(function(a){ return (src[a.id] ? src[a.id].i : 0) || 1; }));
+  AGENTS.slice().sort(function(a,b){ return (src[b.id]?src[b.id].i:0) - (src[a.id]?src[a.id].i:0); }).forEach(function(a){
+    const tk = src[a.id] || {i:0,o:0,r:0,steps:0};
+    const cell = document.createElement("div"); cell.className = "tk-cell";
+    if(tk.i===0) cell.setAttribute("data-zero","1");
+    const wIn = tk.i>0 ? Math.max(tk.i/max*100, 2) : 0;
+    const wOut = tk.i>0 ? Math.max(tk.o/max*100, 1) : 0;
+    cell.innerHTML = '<div class="tk-name"><span>'+a.id.toUpperCase()+'</span><b>'+fmtN(tk.i)+'</b></div>'+
+      '<div class="tk-bar"><div class="tk-in" style="width:'+wIn.toFixed(1)+'%"></div><div class="tk-out" style="width:'+wOut.toFixed(1)+'%"></div></div>';
+    tkRow.appendChild(cell);
+  });
+}
+
+function renderTasks(){
+  const tasks = curTasks();
+  $("taskCnt").textContent = tasks.length + " 个";
+  taskList.innerHTML = "";
+  if(!tasks.length){
+    taskList.innerHTML = '<div style="color:#5a6b85;font-size:11px;padding:14px;text-align:center;font-family:var(--mono)">本群暂无任务</div>';
+    return;
+  }
+  tasks.slice(0, 60).forEach(function(t){
+    const el = document.createElement("div"); el.className = "task";
+    el.setAttribute("data-tid", t.id);
+    const gp = GROUPS.find(function(x){return x.id===t.group}) || GROUPS[0];
+    const st = t.status === "running" ? "run" : (t.reset ? "reset" : "done");
+    const dur = t.dur_s != null ? fmtDur(t.dur_s) : "进行中";
+    const tools = (t.tools || []).slice(0,14);
+    el.innerHTML =
+      '<div class="row1"><span class="st '+st+'"></span>'+
+      '<span class="ttl">'+esc(t.title || "（无摘要）")+'</span></div>'+
+      '<div class="meta"><span><b>'+t.agent.toUpperCase()+'</b></span><span>'+gp.name+'</span>'+
+      '<span>'+t.start+' 起</span><span>'+dur+'</span>'+
+      '<span>'+(t.tools?t.tools.length:0)+' 次工具</span><span>'+(t.msgs||0)+' 条消息</span></div>'+
+      '<div class="arts">'+(t.artifacts && t.artifacts.length
+        ? t.artifacts.map(function(a){return '<div class="art" title="'+esc(a)+'">'+esc(shortPath(a))+'</div>';}).join("")
+        : '<div class="art" style="color:#5a6b85;background:none;border:none">暂无产出物</div>')+'</div>'+
+      '<div class="tools">'+tools.map(function(x){return '<span class="tool">'+esc(x)+'</span>';}).join("")+'</div>';
+    el.addEventListener("click", function(e){
+      if(e.target.closest(".art")) return;
+      el.classList.toggle("open");
+      if(el.classList.contains("open")) highlightTask(t.id);
+    });
+    taskList.appendChild(el);
+  });
+}
+
+function renderMsg(){
+  const msgs = curMsgs();
+  $("msgCnt").textContent = msgs.length + " 条";
+  msgList.innerHTML = "";
+  if(!msgs.length){
+    msgList.innerHTML = '<div style="color:#5a6b85;font-size:11px;padding:10px;text-align:center;font-family:var(--mono)">暂无消息</div>';
+    return;
+  }
+  msgs.forEach(function(m){
+    const gp = GROUPS.find(function(x){return x.id===m.g}) || GROUPS[0];
+    const el = document.createElement("div"); el.className = "msg";
+    el.innerHTML = '<span class="t">'+m.t+'</span><span class="a" style="color:rgb('+gp.rgb+')">'+m.a.toUpperCase()+'</span>'+
+      '<span class="tx" title="点击展开 / 收起">'+esc(m.txt)+'</span><span class="g" style="background:rgb('+gp.rgb+')"></span>';
+    el.querySelector(".tx").addEventListener("click", function(){ el.classList.toggle("open"); });
+    msgList.appendChild(el);
+  });
+}
+
+/* ================= 关系图 ================= */
+function layoutGraph(){
+  const W = scene.clientWidth, H = scene.clientHeight;
+  scene.width = W * (window.devicePixelRatio || 1);
+  scene.height = H * (window.devicePixelRatio || 1);
+  ctx.setTransform((window.devicePixelRatio || 1), 0, 0, (window.devicePixelRatio || 1), 0, 0);
+}
+function drawGraph(pulse){
+  const W = scene.clientWidth, H = scene.clientHeight;
+  if(!W || !H) return;
+  ctx.clearRect(0,0,W,H);
+  const tasks = curTasks();
+  const showT = tasks.slice(0, 10);
+  const agX = W*0.14, agY0 = H*0.12, agGap = Math.min((H*0.76)/AGENTS.length, 64);
+  const tX = W*0.66, tGap = Math.min((H*0.78)/Math.max(showT.length,1), 66), tY0 = H*0.1;
+  const runningIds = {};
+  showT.forEach(function(t){ if(t.status==="running") runningIds[t.agent]=1; });
+  // agent 间沟通连线：最近 3 次，不透明度 1 / 0.6 / 0.15
+  if(S && S.comm){
+    S.comm.slice(0, 3).forEach(function(c, idx){
+      const from = AGENTS.find(function(x){return x.id===c.from;});
+      const to = AGENTS.find(function(x){return x.id===c.to;});
+      if(!from || !to || from._y == null || to._y == null) return;
+      const opa = idx===0 ? 1 : (idx===1 ? 0.6 : 0.15);
+      const y1 = from._y, y2 = to._y, midY = (y1+y2)/2;
+      const cx = agX*0.34;
+      ctx.beginPath(); ctx.moveTo(agX-18, y1);
+      ctx.bezierCurveTo(cx, y1, cx, y2, agX-18, y2);
+      ctx.strokeStyle = "rgba("+curRGB+","+opa+")";
+      ctx.lineWidth = idx===0 ? 2 : 1.4;
+      ctx.stroke();
+      // 箭头指向 to 端
+      const ang = Math.atan2(y2-y1, agX-18-cx);
+      ctx.beginPath();
+      ctx.moveTo(agX-12, y2-6*Math.sign(ang||1)*0.9);
+      ctx.lineTo(agX-18, y2);
+      ctx.lineTo(agX-12, y2+6*Math.sign(ang||1)*0.9);
+      ctx.strokeStyle = "rgba("+curRGB+","+opa+")";
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      if(idx===0){
+        ctx.fillStyle = "rgba("+curRGB+",0.9)";
+        ctx.font = "9px monospace"; ctx.textAlign = "center";
+        ctx.fillText(c.from.toUpperCase()+" → "+c.to.toUpperCase()+"  "+c.t, cx, midY-6);
+      }
+    });
+  }
+  // agent 列
+  AGENTS.forEach(function(a,i){
+    const y = agY0 + i*agGap;
+    const act = runningIds[a.id] ? 1 : 0.28;
+    const r = 17 + act*4;
+    ctx.beginPath(); ctx.arc(agX,y,r,0,6.283);
+    ctx.fillStyle = "rgba("+curRGB+","+(0.16+act*0.14).toFixed(3)+")";
+    ctx.fill();
+    ctx.strokeStyle = act>0.5 ? curHex : "#2a4264"; ctx.lineWidth = act>0.5 ? 2 : 1;
+    ctx.stroke();
+    ctx.fillStyle = act>0.5 ? "#eaf6ff" : "#9db6d8"; ctx.font = "600 11px monospace";
+    ctx.textAlign = "center"; ctx.fillText(a.id.toUpperCase(), agX, y-24);
+    ctx.font = "10px sans-serif"; ctx.fillStyle = "#6d86a8";
+    ctx.fillText(a.role, agX, y+r+15);
+    a._y = y;
+  });
+  // BOSS 节点：被 @ 时红线 + 光晕闪烁
+  const bossY = agY0 + AGENTS.length*agGap + 16;
+  const bossM = S && S.boss_mentions && S.boss_mentions[0];
+  if(bossM){
+    const ag = AGENTS.find(function(x){return x.id===bossM.from;});
+    if(ag && ag._y != null){
+      const bx = agX*0.34;
+      ctx.beginPath(); ctx.moveTo(agX-18, ag._y);
+      ctx.bezierCurveTo(bx, ag._y, bx, bossY, agX-18, bossY);
+      ctx.strokeStyle = "#ff4d5e"; ctx.lineWidth = 1.8; ctx.stroke();
+      if(pulse){
+        const ph = (Math.sin(Date.now()/260)*0.5+0.5);
+        const px = agX-18-(agX-18-bx)*ph, py = ag._y+(bossY-ag._y)*ph;
+        ctx.beginPath(); ctx.arc(px,py,2.6,0,6.283); ctx.fillStyle="#ff4d5e"; ctx.fill();
+      }
+      ctx.fillStyle="#ff8a94"; ctx.font="9px monospace"; ctx.textAlign="center";
+      ctx.fillText(ag.id.toUpperCase()+" @ 你  "+bossM.t, (agX-18+bx)/2, (ag._y+bossY)/2-6);
+    }
+  }
+  const bp = bossM ? (Math.sin(Date.now()/300)*0.5+0.5) : 0;
+  if(pulse && bossM){
+    ctx.beginPath(); ctx.arc(agX, bossY, 16+bp*8, 0, 6.283);
+    ctx.strokeStyle = "rgba(255,77,94,"+(0.2+bp*0.45).toFixed(3)+")";
+    ctx.lineWidth = 2; ctx.stroke();
+  }
+  // 机器人图标
+  ctx.fillStyle = bossM ? "#ff4d5e" : "#ffd479";
+  ctx.fillRect(agX-1, bossY-14, 2, 6);
+  ctx.beginPath(); ctx.arc(agX, bossY-15, 2.5, 0, 6.283); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(agX-9, bossY-8, 18, 14, 4);
+  ctx.fillStyle = "#1a2333"; ctx.fill();
+  ctx.strokeStyle = bossM ? "#ff4d5e" : "#ffd479"; ctx.lineWidth = 1.6; ctx.stroke();
+  ctx.fillStyle = bossM ? "#ff8a94" : "#ffd479";
+  ctx.fillRect(agX-5, bossY-4, 4, 5); ctx.fillRect(agX+1, bossY-4, 4, 5);
+  ctx.fillRect(agX-3, bossY+3, 6, 1.6);
+  ctx.fillStyle = "#ffd9a8"; ctx.font = "700 11px monospace"; ctx.textAlign = "center";
+  ctx.fillText("BOSS", agX, bossY-21);
+  ctx.font = "10px sans-serif"; ctx.fillStyle = "#8a97a8"; ctx.fillText("你", agX, bossY+27);
+  // 任务列 + 连线
+  showT.forEach(function(t,i){
+    const y = tY0 + i*tGap;
+    const gp = GROUPS.find(function(x){return x.id===t.group}) || GROUPS[0];
+    const run = t.status==="running";
+    const ag = AGENTS.find(function(x){return x.id===t.agent});
+    if(ag){
+      const ay = ag._y != null ? ag._y : agY0;
+      const cx = (agX+20+tX)/2;
+      ctx.beginPath(); ctx.moveTo(agX+20, ay);
+      ctx.bezierCurveTo(cx, ay, cx, y, tX-6, y);
+      if(run){
+        ctx.strokeStyle = "rgba("+gp.rgb+","+(0.55+(pulse?0.25*Math.sin(Date.now()/300):0)).toFixed(3)+")";
+        ctx.lineWidth = 1.6;
+      } else {
+        ctx.strokeStyle = "rgba("+gp.rgb+",0.22)"; ctx.lineWidth = 1; ctx.setLineDash([3,4]);
+      }
+      ctx.stroke(); ctx.setLineDash([]);
+      if(run && pulse){
+        const p = (Date.now()/600)%1;
+        const q = 1-p;
+        const x = q*q*(agX+20) + 2*q*p*cx + p*p*(tX-6);
+        const yy = q*q*ay + 2*q*p*((ay+y)/2) + p*p*y;
+        ctx.fillStyle = "#eaf6ff"; ctx.beginPath(); ctx.arc(x,yy,2.2,0,6.283); ctx.fill();
+      }
+    }
+    // 任务节点
+    const w = Math.min(W*0.26, 240), h = 30;
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(tX-w/2, y-h/2, w, h, 8); else ctx.rect(tX-w/2, y-h/2, w, h);
+    ctx.fillStyle = run ? "rgba("+gp.rgb+",0.13)" : "rgba(16,28,50,0.9)";
+    ctx.fill();
+    ctx.strokeStyle = run ? curHex : "rgba("+gp.rgb+",0.55)"; ctx.lineWidth = run ? 1.6 : 1;
+    ctx.stroke();
+    ctx.beginPath(); ctx.arc(tX-w/2+11, y, 3.4, 0, 6.283);
+    ctx.fillStyle = run ? "#5fd39b" : "#5a8bff"; ctx.fill();
+    ctx.fillStyle = "#e6eefc"; ctx.font = "11px sans-serif"; ctx.textAlign = "left";
+    ctx.save(); ctx.beginPath(); ctx.rect(tX-w/2+20, y-12, w-40, 24); ctx.clip();
+    ctx.fillText((t.title || "（无摘要）").slice(0, Math.floor((w-40)/10)), tX-w/2+20, y+4);
+    ctx.restore();
+    ctx.font = "9px monospace"; ctx.fillStyle = "#6d86a8"; ctx.textAlign = "center";
+    ctx.fillText(t.id.toUpperCase()+" · "+t.agent.toUpperCase()+" · "+(t.dur_s!=null?fmtDur(t.dur_s):"进行中"), tX, y+h/2+13);
+  });
+}
+function highlightTask(tid){
+  const el = taskList.querySelector('.task[data-tid="'+tid+'"]');
+  if(el){
+    el.scrollIntoView({block:"nearest", behavior:"smooth"});
+    el.style.borderColor = curHex;
+    setTimeout(function(){ el.style.borderColor = ""; }, 1800);
+  }
+}
+
+/* ================= 轮询 ================= */
+async function poll(){
+  try{
+    const r = await fetch("api/snapshot", {cache:"no-store"});
+    if(!r.ok) throw new Error("http "+r.status);
+    const s = await r.json();
+    S = s;
+    $("livepill").classList.add("on");
+    $("liveTxt").textContent = "LIVE · 4h";
+    $("syncT").textContent = new Date(s.generated_at).toLocaleTimeString("zh-CN",{hour12:false});
+    $("gempty").style.display = "none";
+    renderAll();
+  }catch(e){
+    $("livepill").classList.remove("on");
+    $("liveTxt").textContent = "离线 · 静态";
+    $("syncT").textContent = "";
+  }
+}
+function renderAll(){
+  buildTabs(); renderMetrics(); renderTokenBar(); renderTasks(); renderMsg(); drawGraph(false);
+}
+function loop(){ if(!pauseAni && S){ drawGraph(true); } requestAnimationFrame(loop); }
+
+/* ================= 项目切换 ================= */
+function buildTabs(){
+  const gcnt = {};
+  (S ? S.events : []).forEach(function(e){ if(e.g) gcnt[e.g]=(gcnt[e.g]||0)+1; });
+  projbar.innerHTML = "";
+  GROUPS.forEach(function(gp){
+    const b = document.createElement("button");
+    b.className = "proj-tab"+(gp.id==="all"?" on":""); b.dataset.g = gp.id;
+    const cnt = gp.id==="all" ? (S?S.events.length:0) : (gcnt[gp.id]||0);
+    b.innerHTML = '<span class="sw" style="background:rgb('+gp.rgb+')"></span>'+gp.name+'<span class="cnt">'+cnt+' 事件</span>';
+    projbar.appendChild(b);
+  });
+}
+function setGroup(g){
+  const gp = GROUPS.find(function(x){return x.id===g}); if(!gp) return;
+  curGroup = g; curRGB = gp.rgb; curHex = gp.hex;
+  projbar.querySelectorAll(".proj-tab").forEach(function(x){ x.classList.toggle("on", x.dataset.g===g); });
+  renderAll();
+}
+projbar.addEventListener("click", function(e){
+  const b = e.target.closest(".proj-tab"); if(!b || b.dataset.g===curGroup) return;
+  setGroup(b.dataset.g);
+});
+$("btnPause").addEventListener("click", function(){
+  pauseAni = !pauseAni;
+  this.textContent = pauseAni ? "播放动画" : "暂停动画";
+  this.style.color = pauseAni ? "#ffb454" : "";
+});
+
+/* ================= 启动 ================= */
+window.addEventListener("resize", function(){ layoutGraph(); if(S) drawGraph(false); });
+if(location.protocol === "file:"){
+  $("fileHint").style.display = "flex";
+  $("liveTxt").textContent = "离线 · file 模式";
+}
+layoutGraph();
+buildTabs();
+renderMetrics(); renderTokenBar(); renderTasks(); renderMsg(); drawGraph(false);
+requestAnimationFrame(loop);
+poll();
+setInterval(poll, 15000);
+</script>
+</body>
+</html>
