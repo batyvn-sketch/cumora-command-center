@@ -261,79 +261,124 @@ def _tail_from_argv():
 
 
 REAL_TAIL = int(_tail_from_argv() or os.environ.get("CC_MSG_TAIL", "500"))  # 每会话取最近 N 条
-_real_cache = {"t": 0.0, "data": None}
+# ★ 2026-10-22 Bram（card-e9e8bdf4-c09 · @nova-94d8 07:03Z 裁「提速」· 验收线 < 2 s）：
+#   **慢在 CLI 上，不在本服务**：实测一次 `cumora messages <会话> --tail 500` ≈ 88 s
+#   （成本 = 全量解析 20 MB daemon.log，与 --tail 的大小无关 ⇒ --tail 100 也是 88 s）
+#   ⇒ 旧实现把这次拉取放在**请求路径**上 ⇒ 端点实测 36.41 s / 14.66 s ⇒ 验收线不过。
+#   ⇒ 改法（三条同时做，缺一条都还会慢）：
+#     ① **后台线程刷新缓存**（real_loop）⇒ 请求路径只读内存缓存 ⇒ 毫秒级返回；
+#     ② **上次好数据落盘** ⇒ 冷启动首屏即有内容（不空等一次 88 s）；
+#     ③ **拉取失败/超时保留好数据**（绝不拿空覆盖好数据）⇒ 并如实报 msg_fetch_err。
+#   ⇒ 超时给到 180 s（实测 88 s 且随日志增长 ⇒ 25 s 必然超时 ⇒ 静默回空 = 静默骗人）。
+REAL_FETCH_TIMEOUT = int(os.environ.get("CC_FETCH_TIMEOUT", "180"))
+# 上次好数据的落盘位置（冷启动读取；不落进仓内，避免污染 git）
+CACHE_FILE = os.path.join(os.path.expanduser("~/.cache"), "cumora-command-center", "msg_cache.json")
+# 超过这个秒数没刷新成功 ⇒ 对外标「数据陈旧」（面板如实显示，不装作新鲜）
+STALE_AFTER_S = float(os.environ.get("CC_STALE_AFTER", "180"))
+_real_cache = {"t": 0.0, "data": None, "fetched_at": 0.0, "fetch_ms": 0,
+               "err": None, "refreshing": False}
+_real_lock = threading.Lock()
+# 成功拉过的会话 id（回退清单用；避免「清单接口失败 ⇒ 一个群都不拉」）
+_seen_convo_ids = set()
+# 一轮最多拉多少个会话（每个会话一次 CLI 调用 ⇒ 太多会拖长一轮）
+MAX_FETCH_CONVOS = int(os.environ.get("CC_MAX_CONVOS", "12"))
 MSG_LINE_RE = re.compile(r'^\s*\[(m-[0-9a-f-]+)\]\s*\[\s*(\d{1,2}):(\d{2})\s*(AM|PM)\]\s+([A-Za-z0-9_-]+)\s*#\s*(\d+)\s+(.*)$')
 
 def _active_convos():
-    """最近 4h 内有 turn 活动的会话（扫 daemon.log 尾部识别）；失败/空则回退已知群。"""
-    cutoff = time.time() - WINDOW_H
-    found = OrderedDict()
+    """窗口内有活动的会话（**真源 = `cumora conversations --json`**）。
+
+    ★ 2026-10-22 Bram（card-e9e8bdf4-c09 · 提速改造）：**旧实现是坏的** ——
+      它扫 daemon.log 尾部找 `for g-xxx` 的字样 ⇒ 实测全量 20 MB 日志里
+      「for g-e24ceb6d」**0 命中**、「for g-ec7538ec」**2 命中**（还是老群）
+      ⇒ 于是它只去拉那个早就没人说话的群 ⇒ **面板显示 0 条消息**
+      ⇒ 「打开一次数据要等 25–41 秒 + 打开是空的」＝ 两个病叠在一起。
+      ⇒ 改用 CLI 的会话清单（`cumora conversations --json` · 实测 0.55 s）
+        ⇒ 按 `updated_at` 取窗口内有活动的会话（群 + 私聊，按活动排序取前 N 个）。
+      ⇒ CLI 失败 ⇒ 回退到「已知群 + 上次缓存里的会话」（绝不静默返回空清单）。
+
+    返回 (会话 id 列表, 来源标签) ⇒ 来源标签进快照（如 "cli" / "fallback"）便于排障。
+    """
     try:
-        size = os.path.getsize(LOG)
-        with open(LOG, "rb") as f:
-            f.seek(max(0, size - 3_000_000))
-            data = f.read().decode("utf-8", "ignore")
-        for ln in data.splitlines():
-            m = re.match(r'^\s*(\d{4}-\d{2}-\d{2}T[0-9:.]+Z).*?\bfor ((?:g|allhands)-[a-z0-9-]+)', ln)
-            if m and iso_ts(m.group(1)) >= cutoff:
-                found[m.group(2)] = None
+        r = subprocess.run(["cumora", "conversations", "--json"],
+                           capture_output=True, text=True, timeout=REAL_FETCH_TIMEOUT)
+        items = json.loads(r.stdout or "[]")
+        cutoff = time.time() - WINDOW_H
+        scored = []
+        for it in items:
+            _cid = str(it.get("id") or "")
+            if not _cid:
+                continue
+            _upd = str(it.get("updated_at") or "")
+            _ts = 0.0
+            if _upd:
+                try:
+                    _ts = datetime.fromisoformat(_upd.replace("Z", "+00:00")).timestamp()
+                except Exception:
+                    _ts = 0.0
+            if _ts >= cutoff:
+                scored.append((_ts, _cid))
+        scored.sort(reverse=True)
+        _ids = [c for (_t, c) in scored[:MAX_FETCH_CONVOS]]
+        if _ids:
+            return _ids, "cli"
     except Exception:
-        found = OrderedDict()
-    return list(found.keys()) or list(CONVO_FALLBACK)
+        pass
+    # 回退：已知群 + 以前成功拉过的会话（宁可多拉几个，也不要拉成空）
+    _ids = list(CONVO_FALLBACK)
+    try:
+        with _real_lock:
+            for _cid in sorted(_seen_convo_ids):
+                if _cid not in _ids:
+                    _ids.append(_cid)
+    except Exception:
+        pass
+    return _ids[:MAX_FETCH_CONVOS], "fallback"
 
 def _fetch_convo(cid):
     """拉单个会话的最近消息文本（CLI 结构化真身）；任何失败都返回空串，不抛。
 
     返回 (cid, 文本, 拉到的行数) ⇒ 行数用于判**条数上限有没有顶到**
     （顶到 = 这个会话的可见窗口被上限挤短 ⇒ 要如实报出来，不能继续宣称 4h）。
+
+    ★ 2026-10-22 Bram：`--tail` 取 **REAL_TAIL 与「计数用的大 tail」的较大值**
+      ⇒ **一次调用同时拿到「要显示的」与「真实条数」** ⇒ 省掉第二次 CLI 调用
+      （旧实现：显示用 tail=500 一次 + 计数用 tail=2000 一次 ⇒ 被截断时会话要拉两遍，
+        每遍 ~88 s ⇒ 一个会话 ~176 s）。
     """
     try:
-        # ★ 超时给足：CLI 扫日志在冷启动/大日志时可能十几秒（实测）⇒ 10s 会**静默回空**
-        #   ⇒ 空列表 = 「这个群没消息」⇒ 又是静默骗人。给 25s。
-        r = subprocess.run(["cumora", "messages", cid, "--tail", str(REAL_TAIL)],
-                           capture_output=True, text=True, timeout=25)
+        # ★ 超时给足：CLI 扫日志在冷启动/大日志时可能 88 s+（实测）⇒ 10/25 s 会**静默回空**
+        #   ⇒ 空列表 = 「这个群没消息」⇒ 又是静默骗人。
+        _tail = max(REAL_TAIL, REAL_TAIL * 4)
+        r = subprocess.run(["cumora", "messages", cid, "--tail", str(_tail)],
+                           capture_output=True, text=True, timeout=REAL_FETCH_TIMEOUT)
         _txt = r.stdout or ""
         return cid, _txt, len(_txt.splitlines())
     except Exception:
         return cid, "", 0
 
 
-def _count_in_window(cid, tail):
-    """数这个会话在 4h 窗口内**真实**有多少条（用更大的 tail 拉）⇒ 截断时的「真实 N」。
+def _build_real_data(outs, now):
+    """把各会话拉到的原始文本解析成快照数据（**纯函数**：不碰缓存、不做 IO）。
 
-    ★ 为什么要有它：@nova-94d8 05:0xZ 裁「快照每会话带截断标记（truncated: true, real: N, shown: M）」
-      ⇒ 光说"被截断了"不够 ⇒ 读者要知道**真实多少 / 显示多少**。
+    ★ 2026-10-22 Bram（card-e9e8bdf4-c09 · 提速改造）：
+      ① 拉取与解析分开 ⇒ 解析可以单测；② 「显示条数」与「真实条数」分开算：
+         `shown` = 本会话**实际显示**的条数（受每会话上限 REAL_TAIL 约束）
+         `real`  = 本会话在 4h 窗口内**真实存在**的条数（本次拉到的全部窗口内消息）
+         ⇒ `truncated = (real > shown)` ⇒ 语义自洽：截断时恒有 shown < real
+           （@nova-94d8 05:1xZ 裁的三字段语义 · 探针按这条判）
+      ③ 「这次拉取顶到了 tail 上限」（可能还有更早的消息）是**另一件事**
+         ⇒ 单列 `fetch_cap_hit` 字段，不混进 truncated（两个含义不许混）。
+
+    时间戳只有时钟无日期：按同群消息时序从新到旧单调回推（时钟变大=跨天回退一天）重建。
     """
-    try:
-        r = subprocess.run(["cumora", "messages", cid, "--tail", str(tail)],
-                           capture_output=True, text=True, timeout=40)
-        n = 0
-        for line in (r.stdout or "").splitlines():
-            if MSG_LINE_RE.match(line):
-                n += 1
-        return n
-    except Exception:
-        return 0
-
-def load_real():
-    """真实群消息 → messages / comm / boss_mentions（TTL 缓存；失败回退上次好数据）。
-       时间戳只有时钟无日期：按同群消息时序从新到旧单调回推（时钟变大=跨天回退一天）重建。"""
-    now = time.time()
-    if _real_cache["data"] is not None and now - _real_cache["t"] < REAL_TTL:
-        return _real_cache["data"]
     gm = time.gmtime(now)
     midnight = calendar.timegm((gm.tm_year, gm.tm_mon, gm.tm_mday, 0, 0, 0, 0, 0, 0))
     now_clock = now - midnight
-    convos = _active_convos()
-    try:
-        with ThreadPoolExecutor(max_workers=max(1, len(convos))) as ex:
-            outs = list(ex.map(_fetch_convo, convos))
-    except Exception:
-        outs = [_fetch_convo(c) for c in convos]
     # 条数上限有没有顶到（顶到 ⇒ 该会话的可见窗口被上限挤短 ⇒ 如实报，不装作 4h）
     _tail_hit = any(n >= REAL_TAIL for (_c, _t, n) in outs)
 
     msgs, comm, boss = [], [], []
+    _per_convo = {}          # 会话 → 该会话窗口内的消息（按时间升序）
     for cid, out, _nlines in outs:
         g = gshort(cid)
         rows = []
@@ -354,6 +399,7 @@ def load_real():
                 day = prev_day - (1 if clock > prev_clock else 0)
             ts_list[idx] = midnight + day * 86400 + clock
             prev_clock = clock; prev_day = day
+        _inwin = []
         for idx, (_clock, sender, body) in enumerate(rows):
             ts = ts_list[idx]
             if ts < now - WINDOW_H:                 # 4h 窗口外丢弃
@@ -364,7 +410,7 @@ def load_real():
             if not txt:
                 continue
             _sys = ('"kind":"notice"' in txt) or ("byoa_engine_failed" in txt)
-            msgs.append({"t": hm, "a": a, "g": g, "txt": txt, "ts": ts, "sys": _sys})
+            _inwin.append({"t": hm, "a": a, "g": g, "txt": txt, "ts": ts, "sys": _sys})
             seen = set()
             for m2 in re.finditer(r'@([A-Za-z0-9][A-Za-z0-9-]{1,19})', txt):
                 raw = m2.group(1).lower()
@@ -382,39 +428,175 @@ def load_real():
                     comm.append({"from": a, "to": name, "t": hm, "ts": ts})
             if a != "you" and re.search(r'@you\b|@u-[a-f0-9]+|\bbatyvn\b', txt):
                 boss.append({"from": a, "t": hm, "ts": ts})
+        _inwin.sort(key=lambda x: x["ts"])
+        _per_convo[cid] = _inwin
+        # ★ 每会话显示条数上限（REAL_TAIL）⇒ 只显示最近 N 条，更早的只计入 real
+        for _m in _inwin[-REAL_TAIL:]:
+            _m["_cid"] = cid          # 记下会话 id（多个私聊都叫 priv ⇒ 汇总要按 id 分）
+            msgs.append(_m)
     msgs.sort(key=lambda x: x["ts"])
+    # ★ 全局上限 MAX_MSG：砍掉最早的那些 ⇒ 逐会话 shown 必须按**最终留下的**数算
+    msgs = msgs[-MAX_MSG:]
     # 实际覆盖时长（窗口内最早一条到现在）⇒ 前端据此显示真实窗口，别只宣称 window_h
     _span_h = 0.0
     if msgs:
         _span_h = max(0.0, (now - min(m["ts"] for m in msgs)) / 3600.0)
-    # ★ 逐会话的截断标记（@nova-94d8 05:0xZ 裁：truncated / real / shown）
-    #   · shown = 本会话进了快照的条数｜real = 窗口内真实条数（顶到上限时另拉一次数）
+    # ★ 逐会话的截断标记（@nova-94d8 05:1xZ 裁：truncated / real / shown）
+    #   · shown = 本会话**实际显示**的条数｜real = 本会话窗口内真实条数
     #   · covered_h = 本会话能回看到多远（小时）⇒ 窗口按**最差的那个**对外承诺
-    _convos = {}
+    #   ⚠ 私聊的多个会话都叫「priv」⇒ 汇总层必须**按会话 id 累加**，
+    #     否则 6 个私聊会互相覆盖（顶层 real 就会少算 ⇒ 三字段语义不自洽）。
+    _by_id = {}
     for _cid, _out, _nlines in outs:
+        _inwin = _per_convo.get(_cid) or []
+        _real = len(_inwin)                                   # 窗口内真实条数
+        _disp = _inwin[-REAL_TAIL:]                           # 每会话显示上限
+        _by_id[_cid] = {"_disp": _disp, "real": _real,
+                        "covered_h": round(max(0.0, (now - min((m["ts"] for m in _disp),
+                                                                default=now)) / 3600.0), 3),
+                        "fetched": _nlines,
+                        "fetch_cap_hit": bool(_nlines >= max(REAL_TAIL * 4, 2000))}
+    # 全局上限 MAX_MSG 会砍掉一部分 ⇒ 逐会话 shown 必须按**最终留下的**数来算
+    _kept = {}
+    for _m in msgs:
+        _kept[_m["_cid"]] = _kept.get(_m["_cid"], 0) + 1
+    for _cid, _c in _by_id.items():
+        _shown = int(_kept.get(_cid, 0))
+        _c["shown"] = _shown
+        _c["truncated"] = bool(_c["real"] > _shown)
+        _c.pop("_disp", None)
+    # 按短名（群 = g-xxx 映射；私聊 = priv）汇总 ⇒ 面板逐会话显示
+    _convos = {}
+    for _cid, _c in _by_id.items():
         _g = gshort(_cid)
-        _shown = sum(1 for _m in msgs if _m["g"] == _g)
-        _oldest = min((_m["ts"] for _m in msgs if _m["g"] == _g), default=None)
-        _cov = round(max(0.0, (now - _oldest) / 3600.0), 3) if _oldest else 0.0
-        _trunc = bool(_nlines >= REAL_TAIL)
-        _real = _shown
-        if _trunc:
-            # 顶到上限 ⇒ 真实条数未知 ⇒ 另拉一次更大的 tail 数出来（只在被截断时才多花这一次）
-            _real = _count_in_window(_cid, max(REAL_TAIL * 4, 2000))
-        # ★ 字段名按 @nova-94d8 05:1xZ 裁（纪律⑱-134/140：一个名字一个量）：
-        #   **每会话一组** truncated / real / shown（面板要显示「已截断 · 显示 N / 真实 M」
-        #   就得每会话一组 ⇒ 全局合计那组没有用）⇒ 逐会话明细也放顶层 `convs`。
-        _convos[_g] = {"truncated": _trunc, "real": _real, "shown": _shown,
-                       "covered_h": _cov, "fetched": _nlines}
+        _prev = _convos.get(_g)
+        if _prev is None:
+            _convos[_g] = dict(_c)
+            _convos[_g]["truncated"] = bool(_c["truncated"])
+        else:
+            _prev["real"] += _c["real"]
+            _prev["shown"] += _c["shown"]
+            _prev["truncated"] = bool(_prev["truncated"] or _c["truncated"])
+            _prev["covered_h"] = min(_prev["covered_h"], _c["covered_h"]) if _prev["shown"] else _c["covered_h"]
+            _prev["fetch_cap_hit"] = bool(_prev["fetch_cap_hit"] or _c["fetch_cap_hit"])
+    # ★ 顶层三字段按**会话 id 累加**（与 msgs 同一口径 ⇒ 语义自洽：
+    #   truncated=True ⇒ shown < real；truncated=False ⇒ shown >= real）
+    _real_total = sum(c["real"] for c in _by_id.values())
+    # 全局上限 MAX_MSG 砍掉的那部分也算「被截断」⇒ 否则 shown < real 而 truncated=False
+    _trunc_total = bool(any(c["truncated"] for c in _by_id.values())
+                         or _real_total > len(msgs))
     _covs = [c["covered_h"] for c in _convos.values() if c["shown"] > 0]
     _promise_h = round(min(_covs), 3) if _covs else 0.0
-    data = {"messages": msgs[-MAX_MSG:], "comm": comm, "boss_mentions": boss,
+    return {"messages": msgs, "comm": comm, "boss_mentions": boss,
             "msg_window_h": round(_span_h, 3), "msg_tail_cap": REAL_TAIL,
             "msg_tail_hit": bool(_tail_hit), "msg_convos": _convos,
-            "msg_window_promise_h": _promise_h}
-    _real_cache["t"] = now
-    _real_cache["data"] = data
-    return data
+            "msg_window_promise_h": _promise_h,
+            "msg_real_total": _real_total, "msg_trunc_total": bool(_trunc_total),
+            "msg_convos_by_id": _by_id}
+
+
+def _save_cache_to_disk(data):
+    """把「上次好数据」落盘 ⇒ 冷启动首屏即有内容（不空等一次 ~88 s 的 CLI）。"""
+    try:
+        os.makedirs(os.path.dirname(CACHE_FILE), exist_ok=True)
+        with open(CACHE_FILE, "w", encoding="utf-8") as fh:
+            json.dump({"saved_at": time.time(), "data": data}, fh, ensure_ascii=False)
+    except Exception:
+        pass          # 落盘失败不影响服务（下次启动仍是空首屏 ⇒ 但不会崩）
+
+
+def _load_cache_from_disk():
+    """读「上次好数据」⇒ 返回 (data, saved_at)；没有或坏文件 ⇒ (None, 0)。"""
+    try:
+        with open(CACHE_FILE, encoding="utf-8") as fh:
+            obj = json.load(fh)
+        return obj.get("data"), float(obj.get("saved_at") or 0.0)
+    except Exception:
+        return None, 0.0
+
+
+def _refresh_real():
+    """后台刷新一次真消息缓存（**只在后台线程里调用**）。
+
+    ★ 失败/超时 ⇒ **保留上次好数据**（绝不拿空覆盖好数据）⇒ 并如实记 msg_fetch_err。
+      （旧实现：拉取失败 ⇒ 空列表 ⇒ 面板显示「这个群没消息」⇒ 静默骗人。）
+    """
+    with _real_lock:
+        if _real_cache["refreshing"]:
+            return False
+        _real_cache["refreshing"] = True
+    t0 = time.time()
+    try:
+        convos, _src = _active_convos()
+        try:
+            with ThreadPoolExecutor(max_workers=max(1, len(convos))) as ex:
+                outs = list(ex.map(_fetch_convo, convos))
+        except Exception:
+            outs = [_fetch_convo(c) for c in convos]
+        data = _build_real_data(outs, time.time())
+        if not data.get("messages"):
+            # 一条都没拉到 ⇒ 算失败 ⇒ 保留上次好数据（面板标 stale + err，不装作「群里没消息」）
+            raise RuntimeError("本次拉取 0 条消息（保留上次好数据 · 会话清单=%s）" % (convos,))
+        _done = time.time()
+        with _real_lock:
+            _real_cache.update({"t": _done, "data": data, "fetched_at": _done,
+                                "fetch_ms": int((_done - t0) * 1000), "err": None,
+                                "convo_src": _src, "convo_n": len(convos)})
+        for _cid, _txt, _n in outs:
+            if _n > 0:
+                _seen_convo_ids.add(_cid)
+        _save_cache_to_disk(data)
+        bump()
+        return True
+    except Exception as e:
+        with _real_lock:
+            _real_cache["err"] = str(e)[:200]
+        return False
+    finally:
+        with _real_lock:
+            _real_cache["refreshing"] = False
+
+
+def real_loop():
+    """后台刷新线程：周期性拉真消息 ⇒ 请求路径永远只读缓存（毫秒级）。
+
+    ★ 周期 = 拉取耗时 + REAL_TTL（拉一次 ~88 s ⇒ 实际刷新周期 ~100 s）
+      ⇒ 面板上用 msg_age_s 如实告诉读者「这份数据是多久前的」⇒ 不装作新鲜。
+    ★ 顺带刷新 agent 名单（也是 CLI 调用 ⇒ 同样不许放请求路径）。
+    """
+    while True:
+        try:
+            _refresh_agents()
+        except Exception:
+            pass
+        try:
+            _refresh_real()
+        except Exception:
+            pass
+        time.sleep(REAL_TTL)
+
+
+def load_real():
+    """取真消息快照（**前台直读缓存 · 绝不阻塞**）。
+
+    ★ 2026-10-22 Bram（card-e9e8bdf4-c09 · @nova-94d8 07:03Z 裁「提速」· 验收线 < 2 s）：
+      旧实现把 CLI 拉取放在**请求路径**上（实测 36.41 s / 14.66 s ⇒ 不过线）
+      ⇒ 现在：**后台线程**刷新（real_loop）· 前台只读内存缓存 ⇒ 毫秒级。
+      冷启动 ⇒ 先读磁盘上的「上次好数据」（首屏即有内容）。
+    """
+    with _real_lock:
+        data = _real_cache["data"]
+    if data is None:
+        data, saved_at = _load_cache_from_disk()
+        if data is not None:
+            with _real_lock:
+                if _real_cache["data"] is None:
+                    _real_cache["data"] = data
+                    _real_cache["fetched_at"] = saved_at      # 用落盘时刻算 age（不是现在）
+    return data or {"messages": [], "comm": [], "boss_mentions": [],
+                    "msg_window_h": 0.0, "msg_tail_cap": REAL_TAIL,
+                    "msg_tail_hit": False, "msg_convos": {},
+                    "msg_window_promise_h": 0.0}
 
 def parse_files(st, paths, seen=None):
     """按序读取多个日志文件（.1 旧 → 当前新），逐行喂状态机；seen 为指纹集合时同步填充"""
@@ -658,14 +840,18 @@ AGENTS_TTL = 30.0
 _agents_cache = {"t": 0.0, "data": None}
 PART_RE = re.compile(r'^\s*([A-Za-z0-9_-]+)\s+(agent|human)\s+(\S+)\s+(.*?)\s*$')
 
-def load_agents():
+def _refresh_agents():
+    """拉一次 agent 名单（**只在后台线程里调用**）：两个 CLI 调用，冷启动可能十几秒。
+
+    ★ 2026-10-22 Bram（card-e9e8bdf4-c09 · 提速）：旧实现把这两个调用放在**请求路径**上
+      ⇒ 冷启动后第一次 /api/snapshot 实测 13.4 s ⇒ 验收线（< 2 s）不过
+      ⇒ 改成「后台拉 + 前台只读缓存」。
+    """
     now = time.time()
-    if _agents_cache["data"] is not None and now - _agents_cache["t"] < AGENTS_TTL:
-        return _agents_cache["data"]
     names = {}
     try:   # contacts: kind name role address id（不含自身）
         out = subprocess.run(["cumora", "contacts", "--kind", "agent"],
-                             capture_output=True, text=True, timeout=8).stdout
+                             capture_output=True, text=True, timeout=REAL_FETCH_TIMEOUT).stdout
         for ln in (out or "").splitlines():
             parts = ln.split()
             if len(parts) >= 5 and parts[0] in ("agent", "human"):
@@ -675,7 +861,7 @@ def load_agents():
     agents = []
     try:   # participants: id kind status role（含自身）
         out = subprocess.run(["cumora", "participants"],
-                             capture_output=True, text=True, timeout=8).stdout
+                             capture_output=True, text=True, timeout=REAL_FETCH_TIMEOUT).stdout
         for ln in (out or "").splitlines():
             if "avatar" in ln or ln.strip().startswith("↳"):
                 continue
@@ -690,9 +876,18 @@ def load_agents():
         pass
     order = {a: i for i, a in enumerate(AGENT_SHORT)}
     agents.sort(key=lambda a: order.get(a["id"], 99))
-    _agents_cache["t"] = now
+    _agents_cache["t"] = time.time()      # ★ 记**完成时刻**（不是开始时刻）
     _agents_cache["data"] = agents
     return agents
+
+
+def load_agents():
+    """agent 名单（**前台直读缓存 · 绝不阻塞**）；没有缓存 ⇒ 触发一次后台拉取并先返回空。"""
+    data = _agents_cache.get("data")
+    if data is None:
+        threading.Thread(target=_refresh_agents, daemon=True).start()
+        return []
+    return data
 
 def snapshot():
     check_rotate()
@@ -705,6 +900,16 @@ def snapshot():
     done = [t for t in tasks if t["status"] == "done"]
     rl = load_real()                                   # P0 换源：真实 Cumora 消息
     msgs = rl["messages"]                              # schema 不变：{t,a,g,txt,ts}
+    # ★ 新鲜度如实上报（card-e9e8bdf4-c09 · 提速改造）：
+    #   拉取在后台（~88 s/次）⇒ 前端拿到的可能是「几十秒前」的数据
+    #   ⇒ 必须让读者知道（age / stale / refreshing / 上次耗时 / 上次错误）
+    #   ⇒ 不许拿旧数据装作新鲜（纪律㉞-181：不许静默）。
+    with _real_lock:
+        _fetched_at = float(_real_cache.get("fetched_at") or 0.0)
+        _fetch_ms = int(_real_cache.get("fetch_ms") or 0)
+        _fetch_err = _real_cache.get("err")
+        _refreshing = bool(_real_cache.get("refreshing"))
+    _age_s = round(max(0.0, time.time() - _fetched_at), 1) if _fetched_at else None
     # BRAM:#211 —— 产出物按 path 去重（保留最新 ts），一张卡一条线
     _ded = {}
     for a in st.artifacts:
@@ -741,15 +946,23 @@ def snapshot():
         # ★ 截断标记三字段（@nova-94d8 05:0xZ 裁的**字段名** · 面板按这三字段显示
         #   「已截断 · 显示 shown / 真实 real」）⇒ 顶层给汇总，逐会话明细在 msg_convos。
         #   语义：truncated=True ⇒ shown < real；truncated=False ⇒ shown >= real。
-        "truncated": bool(rl.get("msg_tail_hit", False)),
-        "real": sum(int(c.get("real", 0)) for c in (rl.get("msg_convos") or {}).values()),
+        "truncated": bool(rl.get("msg_trunc_total", rl.get("msg_tail_hit", False))),
+        "real": int(rl.get("msg_real_total", 0)),
         "shown": len(msgs),
         # ★ **每会话一组** truncated/real/shown（@nova-94d8 05:1xZ 裁）
         "convs": {g: {"truncated": bool(c.get("truncated")),
                       "real": int(c.get("real", 0)),
                       "shown": int(c.get("shown", 0)),
-                      "covered_h": c.get("covered_h", 0.0)}
+                      "covered_h": c.get("covered_h", 0.0),
+                      "fetch_cap_hit": bool(c.get("fetch_cap_hit", False))}
                   for g, c in (rl.get("msg_convos") or {}).items()},
+        # ★ 新鲜度（拉取在后台 ⇒ 如实说这份数据是多久前的）
+        "msg_fetched_at": int(_fetched_at) if _fetched_at else 0,
+        "msg_age_s": _age_s,
+        "msg_stale": bool(_age_s is None or _age_s > STALE_AFTER_S),
+        "msg_refreshing": _refreshing,
+        "msg_fetch_ms": _fetch_ms,
+        "msg_fetch_err": _fetch_err,
         "running_tasks": len(running), "done_tasks": len(done),
         "tasks": tasks[:MAX_TASK],
         "messages": msgs,
@@ -803,6 +1016,11 @@ class Handler(BaseHTTPRequestHandler):
         #   （HTTP 头只能 latin-1 ⇒ 中文注释放进 snapshot 的 msg_tail_cap / 面板显示）
         self.send_header("X-Cumora-Msg-Tail-Note",
                          "msg tail N=%d per session" % REAL_TAIL)
+        # ★ 新鲜度（拉取在后台 ⇒ 读者/抓包者能直接看到这份数据是多久前的）
+        with _real_lock:
+            _fa = float(_real_cache.get("fetched_at") or 0.0)
+        self.send_header("X-Cumora-Msg-Age",
+                         ("%.1f" % (time.time() - _fa)) if _fa else "unknown")
         self.end_headers()
         self.wfile.write(body)
 
@@ -865,7 +1083,19 @@ if __name__ == "__main__":
         print("[cumora-cc] 警告: 未找到 %s，等待日志出现" % LOG)
     # Phase 0：进程内 tail（不再依赖外部 pusher/手动重启）
     threading.Thread(target=tail_loop, daemon=True).start()
+    # ★ 2026-10-22 Bram（card-e9e8bdf4-c09 · 提速）：真消息拉取放**后台**线程
+    #   （一次 ~88 s ⇒ 不能放请求路径）⇒ 冷启动先读磁盘上的「上次好数据」⇒ 首屏即有内容。
+    _cached, _saved_at = _load_cache_from_disk()
+    if _cached is not None:
+        with _real_lock:
+            _real_cache["data"] = _cached
+            _real_cache["fetched_at"] = _saved_at
+        print("[cumora-cc] 真消息缓存：读上次好数据（%d 条 · %s 前）"
+              % (len(_cached.get("messages") or []),
+                 ("%.0f s" % (time.time() - _saved_at)) if _saved_at else "?"))
+    threading.Thread(target=real_loop, daemon=True).start()
     srv = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print("[cumora-cc] 实时服务: http://127.0.0.1:%d/  (Ctrl+C 退出)" % PORT)
     print("[cumora-cc] Phase 0 tail 线程已启 · Phase 1 SSE: GET /api/stream · POST /api/ingest 兼容")
+    print("[cumora-cc] 真消息后台刷新线程已启（拉取在后台 ⇒ /api/snapshot 毫秒级返回）")
     srv.serve_forever()

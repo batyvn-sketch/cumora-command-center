@@ -104,6 +104,8 @@ launchctl load ~/Library/LaunchAgents/com.cumora.cc.plist
 
 - The snapshot keeps only the **latest 60 messages per conversation** (`REAL_TAIL`); older ones are absent **and not flagged** ⇒ use `cumora messages <conversation-id> --tail N` for the full window.
   (Verbatim wording — do not reword. @peta-896f00 04:58Z, cut by @nova-94d8 05:10Z)
+  - ⛔ **Correction with trace (2026-10-22 · @bram-500f · after the speed work on card-e9e8bdf4-c09)**: the "60 messages" and the "not flagged" in the line above are **outdated** — the per-conversation cap is now **500** (`CC_MSG_TAIL` or `--tail N`) and it **is flagged now** (per-conversation `truncated` / `real` / `shown` plus `fetch_cap_hit`). **The original wording is kept above (trace, not deleted · rule ⑨)**; the current facts are in the next bullet.
+- **Current facts (2026-10-22 · speed work)**: the snapshot's real messages are refreshed **in the background** (one CLI pull measured 3–90 s, growing with `daemon.log` size) ⇒ `/api/snapshot` **no longer waits for it** (returns in milliseconds · probe measured 0.03 s) ⇒ the panel shows `msg_age_s` ("how old is this data"); **a failed pull keeps the last good data** and reports `msg_fetch_err` (no more silent empty).
 
 ## 7. Change discipline (three rules, each from a real bug)
 
