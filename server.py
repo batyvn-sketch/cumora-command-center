@@ -243,7 +243,24 @@ REAL_TTL = 20.0                 # 真消息缓存秒数（略大于前端 15s �
 #   ⇒ 现在 N=500（覆盖 4h 窗口；`--tail` 取不到更多时由下面的 4h 过滤兜底），
 #     并把**实际覆盖时长**如实报出去（snapshot 的 msg_window_h / msg_tail_hit）⇒
 #     窗口被上限挤短时前端能显示真实值，而不是继续宣称 4h。
-REAL_TAIL = int(os.environ.get("CC_MSG_TAIL", "500"))   # 每会话取最近 N 条
+# ⇒ 再加**启动参数**（@nova-94d8 05:0xZ 裁「环境变量 / 启动参数」两路都要）：
+#     `python3 server.py 8787 --tail 500` ⇒ 启动参数优先于环境变量。
+def _tail_from_argv():
+    for _i, _a in enumerate(sys.argv):
+        if _a == "--tail" and _i + 1 < len(sys.argv):
+            try:
+                return int(sys.argv[_i + 1])
+            except ValueError:
+                pass
+        if _a.startswith("--tail="):
+            try:
+                return int(_a.split("=", 1)[1])
+            except ValueError:
+                pass
+    return None
+
+
+REAL_TAIL = int(_tail_from_argv() or os.environ.get("CC_MSG_TAIL", "500"))  # 每会话取最近 N 条
 _real_cache = {"t": 0.0, "data": None}
 MSG_LINE_RE = re.compile(r'^\s*\[(m-[0-9a-f-]+)\]\s*\[\s*(\d{1,2}):(\d{2})\s*(AM|PM)\]\s+([A-Za-z0-9_-]+)\s*#\s*(\d+)\s+(.*)$')
 
@@ -271,12 +288,32 @@ def _fetch_convo(cid):
     （顶到 = 这个会话的可见窗口被上限挤短 ⇒ 要如实报出来，不能继续宣称 4h）。
     """
     try:
+        # ★ 超时给足：CLI 扫日志在冷启动/大日志时可能十几秒（实测）⇒ 10s 会**静默回空**
+        #   ⇒ 空列表 = 「这个群没消息」⇒ 又是静默骗人。给 25s。
         r = subprocess.run(["cumora", "messages", cid, "--tail", str(REAL_TAIL)],
-                           capture_output=True, text=True, timeout=10)
+                           capture_output=True, text=True, timeout=25)
         _txt = r.stdout or ""
         return cid, _txt, len(_txt.splitlines())
     except Exception:
         return cid, "", 0
+
+
+def _count_in_window(cid, tail):
+    """数这个会话在 4h 窗口内**真实**有多少条（用更大的 tail 拉）⇒ 截断时的「真实 N」。
+
+    ★ 为什么要有它：@nova-94d8 05:0xZ 裁「快照每会话带截断标记（truncated: true, real: N, shown: M）」
+      ⇒ 光说"被截断了"不够 ⇒ 读者要知道**真实多少 / 显示多少**。
+    """
+    try:
+        r = subprocess.run(["cumora", "messages", cid, "--tail", str(tail)],
+                           capture_output=True, text=True, timeout=40)
+        n = 0
+        for line in (r.stdout or "").splitlines():
+            if MSG_LINE_RE.match(line):
+                n += 1
+        return n
+    except Exception:
+        return 0
 
 def load_real():
     """真实群消息 → messages / comm / boss_mentions（TTL 缓存；失败回退上次好数据）。
@@ -350,9 +387,28 @@ def load_real():
     _span_h = 0.0
     if msgs:
         _span_h = max(0.0, (now - min(m["ts"] for m in msgs)) / 3600.0)
+    # ★ 逐会话的截断标记（@nova-94d8 05:0xZ 裁：truncated / real / shown）
+    #   · shown = 本会话进了快照的条数｜real = 窗口内真实条数（顶到上限时另拉一次数）
+    #   · covered_h = 本会话能回看到多远（小时）⇒ 窗口按**最差的那个**对外承诺
+    _convos = {}
+    for _cid, _out, _nlines in outs:
+        _g = gshort(_cid)
+        _shown = sum(1 for _m in msgs if _m["g"] == _g)
+        _oldest = min((_m["ts"] for _m in msgs if _m["g"] == _g), default=None)
+        _cov = round(max(0.0, (now - _oldest) / 3600.0), 3) if _oldest else 0.0
+        _trunc = bool(_nlines >= REAL_TAIL)
+        _real = _shown
+        if _trunc:
+            # 顶到上限 ⇒ 真实条数未知 ⇒ 另拉一次更大的 tail 数出来（只在被截断时才多花这一次）
+            _real = _count_in_window(_cid, max(REAL_TAIL * 4, 2000))
+        _convos[_g] = {"truncated": _trunc, "real": _real, "shown": _shown,
+                       "covered_h": _cov, "fetched": _nlines}
+    _covs = [c["covered_h"] for c in _convos.values() if c["shown"] > 0]
+    _promise_h = round(min(_covs), 3) if _covs else 0.0
     data = {"messages": msgs[-MAX_MSG:], "comm": comm, "boss_mentions": boss,
             "msg_window_h": round(_span_h, 3), "msg_tail_cap": REAL_TAIL,
-            "msg_tail_hit": bool(_tail_hit)}
+            "msg_tail_hit": bool(_tail_hit), "msg_convos": _convos,
+            "msg_window_promise_h": _promise_h}
     _real_cache["t"] = now
     _real_cache["data"] = data
     return data
@@ -670,11 +726,21 @@ def snapshot():
                for a, t in st.tok_all.items()}
     return {
         "generated_at": int(time.time() * 1000),
-        "window_h": 4,
-        # ★ 实际可见窗口（小时）＋ 条数上限状态 ⇒ 广告 4h 与实际给多少**都如实报**
+        # ★ 对外写的窗口 = **实际能覆盖的范围**（@nova-94d8 05:0xZ 裁「先承诺改准」）
+        #   ⇒ 取各会话覆盖时长的**最小值**（我们对每个群都敢承诺的那个窗口）
+        #   ⇒ 另给 msg_window_h（最宽能回看到多远）· msg_convos（逐会话 truncated/real/shown）
+        "window_h": rl.get("msg_window_promise_h", 0.0) or 4,
         "msg_window_h": rl.get("msg_window_h", 0.0),
+        "msg_window_promise_h": rl.get("msg_window_promise_h", 0.0),
         "msg_tail_cap": rl.get("msg_tail_cap", REAL_TAIL),
         "msg_tail_hit": rl.get("msg_tail_hit", False),
+        "msg_convos": rl.get("msg_convos", {}),
+        # ★ 截断标记三字段（@nova-94d8 05:0xZ 裁的**字段名** · 面板按这三字段显示
+        #   「已截断 · 显示 shown / 真实 real」）⇒ 顶层给汇总，逐会话明细在 msg_convos。
+        #   语义：truncated=True ⇒ shown < real；truncated=False ⇒ shown >= real。
+        "truncated": bool(rl.get("msg_tail_hit", False)),
+        "real": sum(int(c.get("real", 0)) for c in (rl.get("msg_convos") or {}).values()),
+        "shown": len(msgs),
         "running_tasks": len(running), "done_tasks": len(done),
         "tasks": tasks[:MAX_TASK],
         "messages": msgs,
@@ -722,6 +788,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
+        # ★ 服务抬头印「本次取 N 条」（@nova-94d8 05:0xZ 裁「甲」）
+        #   ⇒ 读者/抓包者一眼知道这次拉了多少条 ⇒ 截断不再静默。
+        self.send_header("X-Cumora-Msg-Tail", str(REAL_TAIL))
+        #   （HTTP 头只能 latin-1 ⇒ 中文注释放进 snapshot 的 msg_tail_cap / 面板显示）
+        self.send_header("X-Cumora-Msg-Tail-Note",
+                         "msg tail N=%d per session" % REAL_TAIL)
         self.end_headers()
         self.wfile.write(body)
 
