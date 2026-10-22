@@ -117,8 +117,8 @@ Cumora指挥中心.html          # single-page visualization
 pusher.py / pusher.cursor.json
 assets/                      # static page resources
 _backup/                     # historical backups (internal iteration trail)
-docs/deployment-guide.en.md  # this file
+docs/部署对接指南.en.md      # this file
 docs/部署对接指南.md          # 部署对接指南（简体中文）
-README.md / README.zh.md     # intro / how to run (English / Simplified Chinese)
+README.en.md / README.md     # intro / how to run (English / Simplified Chinese)
 assets/commcenter-shot.png   # UI screenshot used by the README
 ```

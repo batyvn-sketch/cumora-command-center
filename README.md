@@ -1,77 +1,78 @@
-# Cumora Command Center (local live view)
+# Cumora 指挥中心（本地实时可视化）
 
-A **read-only** local service: it parses the Cumora daemon log into one snapshot and draws it with a single-page HTML — today's messages, tasks, artifacts, agent activity, comms lines, board, schedule, token usage.
+一个**只读**的本地服务：把 Cumora 的 daemon 日志解析成一份快照，用一个单页 HTML 画出来 —— 今日消息、任务、产出物、agent 活跃、沟通线、看板、日程、token 用量。
 
-![Cumora Command Center UI: agent planets and comms lines on the left; messages / tasks / artifacts / token usage on the right](assets/commcenter-shot.png)
+![Cumora 指挥中心界面：左侧 agent 星球与沟通线，右侧今日消息 / 任务 / 产出物 / token 用量](assets/commcenter-shot.png)
 
-<sub>UI at a glance — local live snapshot (last 4 hours)</sub>
+<sub>界面一览 —— 本地实时快照（最近 4 小时窗口）</sub>
 
-- **Service**: `server.py` (Python 3 standard library, no third-party dependencies)
-- **Page**: `Cumora指挥中心.html` in the same directory (single file, no build step)
-- **Data source**: `~/.cumora/daemon.log` (read-only; the service never writes anything)
-- **Default port**: `8787`
-- **Language**: the page UI ships five languages (`en` / `zh` / `ja` / `ko` / `fr`, switch in the top-right corner) ⇒ **this doc set is mirrored per language**: **[English](README.md)** · **[简体中文](README.zh.md)** (`ja` / `ko` / `fr` land in one batch with @nova-94d8's i18n round — see "Change discipline" rule 3)
+- **服务**：`server.py`（Python 3 标准库，无第三方依赖）
+- **页面**：同目录 `Cumora指挥中心.html`（单文件，无构建步骤）
+- **数据源**：`~/.cumora/daemon.log`（只读；服务不写任何东西）
+- **默认端口**：`8787`
 
-## Run it in 30 seconds
+- **语言**：页面 UI 支持五种（`en` / `zh` / `ja` / `ko` / `fr`，右上角切换）⇒ **本文档按同一套语言逐份对应**：**[简体中文](README.md)** · **[English](README.en.md)**（`ja` / `ko` / `fr` 三份随 @nova-94d8 的 i18n 批次一次补齐 ⇒ 见「变更纪律」第三条）
+
+## 30 秒跑起来
 
 ```bash
 cd /Users/a1234/pi/cumora-command-center
 python3 server.py 8787
-# then open http://127.0.0.1:8787/ in a browser
+# 浏览器打开 http://127.0.0.1:8787/
 ```
 
-Opening the packaged `.app` is blocked once by macOS (Gatekeeper) → click "Open Anyway". **Running the script (`python3 server.py`) is not blocked** (the repo's files carry no quarantine attribute). If the page looks stale ⇒ **hard-refresh** (Cmd+Shift+R) — the cache keeps the old one.
+**双击打开打包的 `.app`** 时 macOS 会拦一次（Gatekeeper）→ 点「仍要打开」；**用 `python3 server.py` 跑脚本不会被拦**（仓库里的文件没有隔离属性）。页面如果看着像旧版 ⇒ **硬刷**（Cmd+Shift+R），缓存会把旧版留住。
 
-## Environment variables
+## 环境变量
 
-| Variable | What it does | Default |
+| 变量 | 作用 | 默认 |
 |---|---|---|
-| `CC_PORT` | listen port | `8787` (you can also run `python3 server.py <port>`) |
-| `CUMORA_LOG` | daemon log path | `~/.cumora/daemon.log` |
-| `CC_HTML` | page file to serve | `Cumora指挥中心.html` in the same directory (`index.html` also works) |
+| `CC_PORT` | 监听端口 | `8787`（也可用 `python3 server.py <port>`） |
+| `CUMORA_LOG` | daemon 日志路径 | `~/.cumora/daemon.log` |
+| `CC_HTML` | 指定页面文件 | 同目录 `Cumora指挥中心.html`（也认 `index.html`） |
 
-## How to confirm it is really running (three self-checks)
+## 怎么确认它真的在跑（三个自检点）
 
-1. **A new message shows up** — post one line in any group and refresh: it appears at the top of the stream (**the top counter is the 4-hour-window count and does *not* necessarily go +1** — measured: the message appeared while the counter stayed) ⇒ **do not use the counter as the self-check**
-2. **Both ends of a comms line are real agents** — not placeholder dots
-3. **Seven agent portraits** — nina / nova / iris / atlas / sage / bram / peta
+1. **新消息会出现在消息流里** —— 在任意群里发一句并刷新：它出现在流的最前面（**顶部「今日消息」计数是 4 小时窗口内的条数，不保证每次 +1** —— 实测：新消息出现了而计数没动 ⇒ **别拿计数当自检**）
+2. **沟通线的两端是真 agent** —— 不是占位圆点
+3. **agent 肖像 7 张** —— 对应 nina / nova / iris / atlas / sage / bram / peta
 
-## API
+## 接口
 
-| Path | What it is |
+| 路径 | 说明 |
 |---|---|
-| `GET /` | the single page (HTML) |
-| `GET /api/snapshot` | JSON snapshot: last 4 hours window + all-time token totals (CORS open) |
+| `GET /` | 单页页面（HTML） |
+| `GET /api/snapshot` | JSON 快照：最近 4 小时窗口 + token 全量累计（CORS 开放） |
 
-`/api/snapshot` main fields: `tasks` (task: `agent` / `artifacts` / `steps` / `status` / `start` / `end`) · `artifacts` (artifact: `t` time / `a` agent / `g` group / `path`, **a `task` pointer is being added**) · `agents` (id / name / role / status) · `groups` · `messages` · `events` · `comm` (comms lines) · `tokens_g` / `tokens_all`.
+`/api/snapshot` 主要字段：`tasks`（任务，含 `agent` / `artifacts` / `steps` / `status` / `start` / `end`）· `artifacts`（产出物：`t` 时间 / `a` agent / `g` 群 / `path`，**即将补 `task` 任务指针**）· `agents`（id / name / role / status）· `groups` · `messages` · `events` · `comm`（沟通线）· `tokens_g` / `tokens_all`。
 
-## Layout
+## 目录结构
 
 ```
-server.py                    # local data service (single entry point)
-Cumora指挥中心.html          # single-page visualization
-pusher.py                    # small tool that pushes to the remote
-assets/                      # static page resources
-_backup/                     # historical backups (internal iteration trail)
-docs/deployment-guide.en.md  # deployment / integration / troubleshooting (English)
+server.py                    # 本地数据服务（唯一入口）
+Cumora指挥中心.html          # 单页可视化
+pusher.py                    # 推送到远端的小工具
+assets/                      # 页面静态资源
+_backup/                     # 历史版本备份（内部迭代留痕）
 docs/部署对接指南.md          # 部署 / 对接 / 排障 / 变更纪律（简体中文）
-README.md / README.zh.md     # this file / the Simplified Chinese one
-assets/commcenter-shot.png   # UI screenshot used by this README
+docs/部署对接指南.en.md      # 部署 / 对接 / 排障 / 变更纪律（English）
+README.md                    # 本文件（English）
+assets/commcenter-shot.png   # 界面截图（README 用）
 ```
 
-## Known limits
+## 已知限制
 
-- **No process supervisor** — nobody notices if the service dies (add a launchd / cron autostart yourself)
-- **A busy port makes it fail to start** — check `lsof -nP -iTCP:8787 -sTCP:LISTEN` first
-- **3D frames are skipped on machines without OpenGL** — figures 9/10 lose their 3D part, the rest is fine
-- **The page never caches data** — every refresh re-reads daemon.log
+- **没有进程守护** —— 服务挂了没人知道（建议自己挂个 launchd / 定时自启）
+- **端口占用会直接起不来** —— 先 `lsof -nP -iTCP:8787 -sTCP:LISTEN` 看看
+- **无 OpenGL 的机器上 3D 帧会被跳过** —— 图 9/10 的 3D 部分没有，其余正常
+- **页面不缓存数据** —— 每次刷新都现读 daemon.log
 
-## Change discipline (three rules, each from a real bug)
+## 变更纪律（三条，踩过坑）
 
-- **A traceable landing point = a commit + who authored it** — the shared `.git/config` has one `user.name`, so everyone's commit records as whoever that is ⇒ **before your first commit, set `git config user.name "Your Name"` + `git config user.email "you@example.com"`** (once, then always right)
-- **Exactly one source of truth** — do not keep the same file in two places (two copies ⇒ one of them expires, and people only read the expired one)
-- **Docs in many languages = all at once** — mirror every doc across the five languages the page supports (`en` / `zh` / `ja` / `ko` / `fr`); **adding one language means adding all five** (this README + the deployment guide) · section by section · change a paragraph ⇒ change it in five places · **currently `en` + `zh` are in** (the page UI already ships all five)
+- **落点可追 = 有 commit + 作者是谁** —— 共享的 `.git/config` 里 `user.name` 是谁，所有人的提交就都记成谁 ⇒ **每人第一次提交前先 `git config user.name "你的名字"` + `git config user.email "你的邮箱"`**（一次配置，永久正确）
+- **唯一源只有一处** —— 别把同一份文件放两个地方（放了两处就有一处会过期）
+- **文档多语言 = 一次加齐** —— 按页面支持的五种语言（`en` / `zh` / `ja` / `ko` / `fr`）逐份对应；**加一种语言就要一次补齐五份**（本 README + `docs/部署对接指南.md` 各一份）· 五份逐段对应 · 改一段要改五段 · **当前已落 `en` / `zh` 两份**（页面 UI 的五语言包已全在）
 
-## Remote
+## 远端
 
-`https://github.com/batyvn-sketch/cumora-command-center` (public · main)
+`https://github.com/batyvn-sketch/cumora-command-center`（public · main）
