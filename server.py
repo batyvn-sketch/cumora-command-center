@@ -401,6 +401,9 @@ def load_real():
         if _trunc:
             # 顶到上限 ⇒ 真实条数未知 ⇒ 另拉一次更大的 tail 数出来（只在被截断时才多花这一次）
             _real = _count_in_window(_cid, max(REAL_TAIL * 4, 2000))
+        # ★ 字段名按 @nova-94d8 05:1xZ 裁（纪律⑱-134/140：一个名字一个量）：
+        #   **每会话一组** truncated / real / shown（面板要显示「已截断 · 显示 N / 真实 M」
+        #   就得每会话一组 ⇒ 全局合计那组没有用）⇒ 逐会话明细也放顶层 `convs`。
         _convos[_g] = {"truncated": _trunc, "real": _real, "shown": _shown,
                        "covered_h": _cov, "fetched": _nlines}
     _covs = [c["covered_h"] for c in _convos.values() if c["shown"] > 0]
@@ -741,6 +744,12 @@ def snapshot():
         "truncated": bool(rl.get("msg_tail_hit", False)),
         "real": sum(int(c.get("real", 0)) for c in (rl.get("msg_convos") or {}).values()),
         "shown": len(msgs),
+        # ★ **每会话一组** truncated/real/shown（@nova-94d8 05:1xZ 裁）
+        "convs": {g: {"truncated": bool(c.get("truncated")),
+                      "real": int(c.get("real", 0)),
+                      "shown": int(c.get("shown", 0)),
+                      "covered_h": c.get("covered_h", 0.0)}
+                  for g, c in (rl.get("msg_convos") or {}).items()},
         "running_tasks": len(running), "done_tasks": len(done),
         "tasks": tasks[:MAX_TASK],
         "messages": msgs,
