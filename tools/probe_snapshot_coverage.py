@@ -82,6 +82,8 @@ def main(argv=None):
     except Exception:
         pass
     alias = {}
+    skip = {}
+    win_start = cutoff.timestamp()
     for g in (snap.get("groups") or []):
         gid = g.get("id")
         gname = g.get("name")
@@ -89,12 +91,25 @@ def main(argv=None):
             alias[gid] = gid
         elif gid and gname and gname in name2id:
             alias[gid] = name2id[gname]
+        else:
+            # 换不回去的两种情况，都不是「少读了」：
+            # ① 'priv' = 私聊聚合名（不是会话 id ⇒ 真实条数无从取得 ⇒ 不参与比较）
+            # ② 窗口内没有活动的群（last_ts < 窗口起点 ⇒ 真实条数恒 0 ⇒ 不参与比较）
+            if gid == "priv":
+                skip[gid] = "私聊聚合名（不是会话 id）"
+            elif (g.get("last_ts") or 0) < win_start:
+                skip[gid] = "窗口内无活动（last_ts 早于窗口起点）"
+            else:
+                skip[gid] = "**换不回去会话 id ⇒ 未对账**"
     convos = []
     for m in msgs:
         g = m.get("g")
         if g and g not in convos:
             convos.append(g)
     real_ids = [alias.get(g) for g in convos]
+    for g in convos:
+        if g not in alias:
+            real_ids[convos.index(g)] = None
 
     print("=" * 78)
     print("快照消息覆盖量探针（card-e9e8bdf4-c09 · 纪律㉞-171 覆盖量形态）")
@@ -108,8 +123,13 @@ def main(argv=None):
     per = {}
     for short, cid in zip(convos, real_ids):
         if cid is None:
-            unreadable.append(short)
-            per[short] = None
+            why = skip.get(short, "换不回去会话 id")
+            if "未对账" in why:
+                unreadable.append(short)
+                per[short] = None
+            else:
+                print(f"  · {short:<14} 不参与比较（{why}）")
+                per[short] = 0
             continue
         n = counts.get(cid)
         if n is None:
