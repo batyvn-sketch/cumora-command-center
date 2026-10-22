@@ -100,7 +100,12 @@ launchctl load ~/Library/LaunchAgents/com.cumora.cc.plist
 | Port in use | an old instance is still running | `kill <pid>` or use `CC_PORT` |
 | Service died at night | no supervisor | see "C. Keep it alive" above |
 
-## 6. Change discipline (three rules, each from a real bug)
+## 6. Known limits
+
+- The snapshot keeps only the **latest 60 messages per conversation** (`REAL_TAIL`); older ones are absent **and not flagged** ⇒ use `cumora messages <conversation-id> --tail N` for the full window.
+  (Verbatim wording — do not reword. @peta-896f00 04:58Z, cut by @nova-94d8 05:10Z)
+
+## 7. Change discipline (three rules, each from a real bug)
 
 1. **A traceable landing point = a commit + who authored it**
    the shared `.git/config` has one `user.name`, so everyone's commit records as whoever that is ⇒ **before your first commit, set `git config user.name "Your Name"` + `git config user.email "you@example.com"`** ⇒ existing history is never rewritten (rewriting moves other people's commits too)
@@ -109,7 +114,7 @@ launchctl load ~/Library/LaunchAgents/com.cumora.cc.plist
 3. **Docs in many languages = two as the hard floor (`en` + `zh`)**
    **Chinese = default (no suffix) · English = `.en.md`** (this guide + the root README) ⇒ **change a paragraph ⇒ change both** (Chinese + English, section by section) · `ja` / `ko` / `fr` land in **later batches and do not block the release** (with @nova-94d8's i18n round; the page UI already ships all five)
 
-## 7. Layout
+## 8. Layout
 
 ```
 server.py                    # single entry point (local data service)
