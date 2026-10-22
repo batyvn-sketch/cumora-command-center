@@ -20,14 +20,28 @@ import datetime
 import json
 import subprocess
 import sys
+import time
 import urllib.request
 
 DEFAULT_URL = "http://127.0.0.1:8787"
 
 
-def fetch_snapshot(url):
-    with urllib.request.urlopen(url.rstrip("/") + "/api/snapshot", timeout=20) as r:
-        return json.load(r)
+# ★ 2026-10-22 修（@sage-6hig · 纪律㉞-171 补句「rc 的语义」）：
+#   **timeout 从 20 s 提到 90 s** —— 端点当前实测耗时 16–41 s（@nova-94d8 06:2xZ 测得 25.07/41.11 s）
+#   ⇒ 20 s 的 timeout 让 rc 在**「读到了」与「没读到」之间随机翻**（实测：同一份代码 1 次 rc=0 + 3 次 rc=2）
+#   ⇒ ⇒ **rc 不能表达「这次覆盖量合不合格」** ⇒ 违反 PM 06:4xZ 立的规矩
+#      （rc 只表达「本次执行是否符合【这次的预期】」⇒ 预期不同 ⇒ rc 的含义不同）。
+#   ⇒ 修法：**rc 只管覆盖量语义**（timeout 放宽到 90 s）；**端点耗时单独一行读数 + 单独一个判定**
+#      （PM 的提速验收 = 同一时刻连打两次都 < 2 s ⇒ 归 @bram-500f）⇒ 不再用 timeout 当隐形的第三态。
+SNAP_TIMEOUT = 90
+LATENCY_LIMIT_S = 2.0      # PM 的提速验收线（同一时刻连打两次都 < 2 s）
+
+
+def fetch_snapshot(url, timeout=SNAP_TIMEOUT):
+    t0 = time.time()
+    with urllib.request.urlopen(url.rstrip("/") + "/api/snapshot", timeout=timeout) as r:
+        data = json.load(r)
+    return data, time.time() - t0
 
 
 def real_counts(convos, cutoff):
@@ -60,11 +74,26 @@ def main(argv=None):
     ap.add_argument("--window-h", type=float, default=None, help="默认取快照里的 window_h")
     args = ap.parse_args(argv)
 
-    try:
-        snap = fetch_snapshot(args.url)
-    except Exception as e:
-        print(f"⛔ 快照读不到（{e}）⇒ 未对账（不许当通过）")
-        return 2
+    # ── 端点耗时：**单独读数 + 单独判定**（PM 的提速验收：同一时刻连打两次都 < 2 s）
+    #   ⇒ 连打两次 ⇒ 取**最坏那次**（不许只报好看的）
+    lat = []
+    snap = None
+    for i in range(2):
+        try:
+            snap, dt = fetch_snapshot(args.url)
+            lat.append(dt)
+            print(f"  · 快照取回 #{i+1} 耗时 {dt:.2f} s")
+        except Exception as e:
+            print(f"⛔ 快照读不到（{e}）⇒ 未对账（不许当通过）")
+            return 2
+    worst = max(lat)
+    print(f"  · 端点耗时（两次取最坏）= {worst:.2f} s ｜ PM 的提速验收线 = < {LATENCY_LIMIT_S:.0f} s")
+    latency_ok = worst < LATENCY_LIMIT_S
+    if latency_ok:
+        print(f"  ✔ 提速验收：{worst:.2f} s < {LATENCY_LIMIT_S:.0f} s ✔")
+    else:
+        print(f"  ⚠ 提速验收**未过**：{worst:.2f} s ≥ {LATENCY_LIMIT_S:.0f} s"
+              f" ⇒ 归 @bram-500f（每会话各拉一次 tail 500）⇒ **这条不并入 rc**（rc 只表达覆盖量语义）")
     win = args.window_h if args.window_h is not None else (snap.get("window_h") or 4)
     now = datetime.datetime.now(datetime.timezone.utc)
     cutoff = now - datetime.timedelta(hours=win)
@@ -190,6 +219,9 @@ def main(argv=None):
         return 1
     print(f"⇒ 结论：**PASS**（快照 {len(msgs)} 条 ≥ 真实 {total_real} 条 ⇒ 窗口内一条不丢；"
           f"且截断标记三字段齐全、语义自洽 ✔）")
+    print(f"  另读数（**本次预期 = 覆盖量 100% + 三字段齐全自洽** ⇒ rc=0 表达的就是这件事）："
+          f"｜端点耗时 {worst:.2f} s（提速验收 {'✔ 过' if latency_ok else '✘ 未过'}）"
+          f"｜**⇒ 这条是独立的一格，不是 rc 的一部分**")
     return 0
 
 
