@@ -139,6 +139,28 @@ def main(argv=None):
         per[short] = n
         total_real += n
 
+    # ---- 关闭证据 ②（@nova-94d8 05:0xZ 裁）：快照必须带 truncated / real / shown 三字段，
+    #      且语义自洽（truncated=True ⇒ shown < real；truncated=False ⇒ shown >= real）
+    print("-" * 78)
+    print("关闭证据 ②（截断标记三字段 · @nova-94d8 05:0xZ 裁的字段名）")
+    need = ("truncated", "real", "shown")
+    missing = [k for k in need if k not in snap]
+    if missing:
+        print(f"  ✘ 缺字段：{' / '.join(missing)} ⇒ 快照没带截断标记 ⇒ 面板无法显示「已截断 · 显示 N / 真实 M」")
+        near = {k: snap[k] for k in ("msg_tail_hit", "msg_tail_cap", "msg_window_h") if k in snap}
+        if near:
+            print(f"     现有近似字段（**字段名要按 PM 裁统一** · 纪律㉞-134/140 同一件事一处权威）：{near}")
+    else:
+        trunc = snap.get("truncated")
+        real_n = snap.get("real")
+        shown_n = snap.get("shown")
+        ok_sem = (shown_n < real_n) if trunc else (shown_n >= real_n)
+        if ok_sem:
+            print(f"  ✔ 三字段齐全且语义自洽（truncated={trunc} · real={real_n} · shown={shown_n}）")
+        else:
+            print(f"  ✘ 语义不自洽（truncated={trunc} · real={real_n} · shown={shown_n}）")
+            missing.append("语义")
+
     snap_by_g = {}
     for m in msgs:
         snap_by_g[m.get("g")] = snap_by_g.get(m.get("g"), 0) + 1
@@ -163,7 +185,11 @@ def main(argv=None):
         print(f"⇒ 结论：**FAIL**（快照少了 {total_real - len(msgs)} 条 ⇒ 可见窗口短于广告的 {win}h"
               f" ⇒ 读者看不到旧消息 ⇒ 「消息数随说话变」那条自检会骗人）")
         return 1
-    print(f"⇒ 结论：**PASS**（快照 {len(msgs)} 条 ≥ 真实 {total_real} 条 ⇒ 窗口内一条不丢）")
+    if missing:
+        print(f"⇒ 结论：**FAIL**（覆盖量 100% ✔，但**关闭证据 ② 未满足**：{missing}）")
+        return 1
+    print(f"⇒ 结论：**PASS**（快照 {len(msgs)} 条 ≥ 真实 {total_real} 条 ⇒ 窗口内一条不丢；"
+          f"且截断标记三字段齐全、语义自洽 ✔）")
     return 0
 
 
