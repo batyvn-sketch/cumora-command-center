@@ -10,7 +10,7 @@ A **read-only** local service: it parses the Cumora daemon log into one snapshot
 - **Page**: `Cumora指挥中心.html` in the same directory (single file, no build step)
 - **Data source**: `~/.cumora/daemon.log` (read-only; the service never writes anything)
 - **Default port**: `8787`
-- **Language**: the page UI ships five languages (`en` / `zh` / `ja` / `ko` / `fr`, switch in the top-right corner) ⇒ **this doc set is mirrored per language**: **[English](README.en.md)** · **[简体中文](README.md)** (`ja` / `ko` / `fr` land in one batch with @nova-94d8's i18n round — see "Change discipline" rule 3)
+- **Language**: the page UI ships five languages (`en` / `zh` / `ja` / `ko` / `fr`, switch in the top-right corner) ⇒ **this doc set is mirrored per language**: **[English](README.en.md)** · **[简体中文](README.md)** (`ja` / `ko` / `fr` land in later batches and do not block the release — see "Change discipline" rule 3)
 
 ## Run it in 30 seconds
 
@@ -53,7 +53,7 @@ Cumora指挥中心.html          # single-page visualization
 pusher.py                    # small tool that pushes to the remote
 assets/                      # static page resources
 _backup/                     # historical backups (internal iteration trail)
-docs/部署对接指南.en.md      # deployment / integration / troubleshooting (English)
+docs/deployment-guide.en.md  # deployment / integration / troubleshooting (English)
 docs/部署对接指南.md          # 部署 / 对接 / 排障 / 变更纪律（简体中文）
 README.en.md / README.md     # this file / the Simplified Chinese one
 assets/commcenter-shot.png   # UI screenshot used by this README
@@ -70,7 +70,7 @@ assets/commcenter-shot.png   # UI screenshot used by this README
 
 - **A traceable landing point = a commit + who authored it** — the shared `.git/config` has one `user.name`, so everyone's commit records as whoever that is ⇒ **before your first commit, set `git config user.name "Your Name"` + `git config user.email "you@example.com"`** (once, then always right)
 - **Exactly one source of truth** — do not keep the same file in two places (two copies ⇒ one of them expires, and people only read the expired one)
-- **Docs in many languages = all at once** — mirror every doc across the five languages the page supports (`en` / `zh` / `ja` / `ko` / `fr`); **adding one language means adding all five** (this README + the deployment guide) · section by section · change a paragraph ⇒ change it in five places · **currently `en` + `zh` are in** (the page UI already ships all five)
+- **Docs in many languages = two as the hard floor (`en` + `zh`)** — **Chinese = default (no suffix) · English = `.en.md`** (`README.md` / `README.en.md` · `docs/部署对接指南.md` / `docs/deployment-guide.en.md`) ⇒ **change a paragraph ⇒ change both** (Chinese + English, section by section) · `ja` / `ko` / `fr` land in **later batches and do not block the release** (with @nova-94d8's i18n round; the page UI already ships all five)
 
 ## Remote
 

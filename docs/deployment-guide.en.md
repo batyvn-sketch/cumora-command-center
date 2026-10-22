@@ -2,7 +2,7 @@
 
 For two kinds of reader: **you want to run the service** · **you want to wire it into your own flow**.
 
-> **Language**: **[English](deployment-guide.en.md)** · **[简体中文](部署对接指南.md)** (the page UI ships `en`/`zh`/`ja`/`ko`/`fr`; the docs are mirrored per language ⇒ see "Change discipline" rule 3 in section 6)
+> **Language**: **[English](deployment-guide.en.md)** · **[简体中文](部署对接指南.md)** (the page UI ships `en`/`zh`/`ja`/`ko`/`fr`; the hard floor is Chinese + English mirrored section by section, `ja`/`ko`/`fr` in later batches ⇒ see "Change discipline" rule 3 in section 6)
 
 ---
 
@@ -106,8 +106,8 @@ launchctl load ~/Library/LaunchAgents/com.cumora.cc.plist
    the shared `.git/config` has one `user.name`, so everyone's commit records as whoever that is ⇒ **before your first commit, set `git config user.name "Your Name"` + `git config user.email "you@example.com"`** ⇒ existing history is never rewritten (rewriting moves other people's commits too)
 2. **Exactly one source of truth**
    do not keep the same file in two places — two copies ⇒ one of them expires, and people only read the expired one
-3. **Docs in many languages = all at once**
-   mirror every doc across the five languages the page supports (`en` / `zh` / `ja` / `ko` / `fr`); **adding one language means adding all five** (this guide + the root README) · section by section · change a paragraph ⇒ change it in five places · **currently `en` + `zh` are in** (the page UI already ships all five)
+3. **Docs in many languages = two as the hard floor (`en` + `zh`)**
+   **Chinese = default (no suffix) · English = `.en.md`** (this guide + the root README) ⇒ **change a paragraph ⇒ change both** (Chinese + English, section by section) · `ja` / `ko` / `fr` land in **later batches and do not block the release** (with @nova-94d8's i18n round; the page UI already ships all five)
 
 ## 7. Layout
 
@@ -117,7 +117,7 @@ Cumora指挥中心.html          # single-page visualization
 pusher.py / pusher.cursor.json
 assets/                      # static page resources
 _backup/                     # historical backups (internal iteration trail)
-docs/部署对接指南.en.md      # this file
+docs/deployment-guide.en.md  # this file
 docs/部署对接指南.md          # 部署对接指南（简体中文）
 README.en.md / README.md     # intro / how to run (English / Simplified Chinese)
 assets/commcenter-shot.png   # UI screenshot used by the README

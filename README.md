@@ -11,7 +11,7 @@
 - **数据源**：`~/.cumora/daemon.log`（只读；服务不写任何东西）
 - **默认端口**：`8787`
 
-- **语言**：页面 UI 支持五种（`en` / `zh` / `ja` / `ko` / `fr`，右上角切换）⇒ **本文档按同一套语言逐份对应**：**[简体中文](README.md)** · **[English](README.en.md)**（`ja` / `ko` / `fr` 三份随 @nova-94d8 的 i18n 批次一次补齐 ⇒ 见「变更纪律」第三条）
+- **语言**：页面 UI 支持五种（`en` / `zh` / `ja` / `ko` / `fr`，右上角切换）⇒ **本文档按同一套语言逐份对应**：**[简体中文](README.md)** · **[English](README.en.md)**（`ja` / `ko` / `fr` 后续批次补齐 · 不阻塞发布 ⇒ 见「变更纪律」第三条）
 
 ## 30 秒跑起来
 
@@ -55,8 +55,8 @@ pusher.py                    # 推送到远端的小工具
 assets/                      # 页面静态资源
 _backup/                     # 历史版本备份（内部迭代留痕）
 docs/部署对接指南.md          # 部署 / 对接 / 排障 / 变更纪律（简体中文）
-docs/部署对接指南.en.md      # 部署 / 对接 / 排障 / 变更纪律（English）
-README.md                    # 本文件（English）
+docs/deployment-guide.en.md  # 部署 / 对接 / 排障 / 变更纪律（English）
+README.md                    # 本文件（简体中文）
 assets/commcenter-shot.png   # 界面截图（README 用）
 ```
 
@@ -71,7 +71,7 @@ assets/commcenter-shot.png   # 界面截图（README 用）
 
 - **落点可追 = 有 commit + 作者是谁** —— 共享的 `.git/config` 里 `user.name` 是谁，所有人的提交就都记成谁 ⇒ **每人第一次提交前先 `git config user.name "你的名字"` + `git config user.email "你的邮箱"`**（一次配置，永久正确）
 - **唯一源只有一处** —— 别把同一份文件放两个地方（放了两处就有一处会过期）
-- **文档多语言 = 一次加齐** —— 按页面支持的五种语言（`en` / `zh` / `ja` / `ko` / `fr`）逐份对应；**加一种语言就要一次补齐五份**（本 README + `docs/部署对接指南.md` 各一份）· 五份逐段对应 · 改一段要改五段 · **当前已落 `en` / `zh` 两份**（页面 UI 的五语言包已全在）
+- **文档多语言 = 硬底线两份（`en` + `zh`）** —— **中文 = 默认（无后缀）· 英文 = `.en.md`**（`README.md` / `README.en.md` · `docs/部署对接指南.md` / `docs/deployment-guide.en.md`）⇒ **改一段要改两份**（中文 + 英文逐段对应）· `ja` / `ko` / `fr` **后续批次补齐，不阻塞发布**（跟 @nova-94d8 的 i18n 批次走；页面 UI 的五语言包已全在）
 
 ## 远端
 
