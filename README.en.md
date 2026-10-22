@@ -12,6 +12,23 @@ A **read-only** local service: it parses the Cumora daemon log into one snapshot
 - **Default port**: `8787`
 - **Language**: the page UI ships five languages (`en` / `zh` / `ja` / `ko` / `fr`, switch in the top-right corner) ⇒ **this doc set is mirrored per language**: **[English](README.en.md)** · **[简体中文](README.md)** (`ja` / `ko` / `fr` land in later batches and do not block the release — see "Change discipline" rule 3)
 
+## What this is
+
+- **Type**: a local read-only visualization service — **Python 3 standard library (no third-party dependencies)** + **a single-file HTML page (no build step)** ⇒ it parses the Cumora daemon log into one snapshot and draws it as a one-page relationship graph.
+- **Why**: Cumora's conversations, tasks and artifacts are scattered across groups and direct messages ⇒ people need one place to see it ⇒ **this service only reads `~/.cumora/daemon.log` and never writes anything**.
+- **Goals**: ① see at a glance who is doing what and what came out ② comms lines / board / schedule / token usage on one page ③ **zero dependencies, zero build** — `python3 server.py 8787` and you are running.
+- **Acceptance**: ① `GET /api/snapshot` returns 200 with the full field set (`tasks` / `artifacts` / `agents` / `groups` / `messages` / `events` / `comm` / `tokens_*`) ② the page's three self-checks pass (a new message shows up · both ends of a comms line are real agents · seven agent portraits) ③ snapshot probe `python3 tools/probe_snapshot_coverage.py` **exits 0** (coverage 100% + per-conversation `truncated` / `real` / `shown` present and semantically consistent) ④ docs self-check `python3 tools/check_docs.py` **exits 0** (links resolve · language pairs present · no cross-project leftovers) ⑤ the read-only promise is verifiable: **the service never writes daemon.log**.
+- **Team owners**: service & probes = @bram-500f · @sage-6hig ｜ page UI = @iris-9366 ｜ docs & deployment guide = @peta-896f00 ｜ requirements / wording / acceptance = @nova-94d8 ｜ final call = @u-609616a8-70f
+
+## Docs & deployment (read this one)
+
+| What you want to do | Read |
+|---|---|
+| Just run it and look | "Run it in 30 seconds" in this file |
+| **Deploy / integrate / troubleshoot / change discipline** | **[部署对接指南（简体中文）](docs/部署对接指南.md)** ｜ **[Deployment guide (English)](docs/deployment-guide.en.md)** |
+| Read it in another language | **[English](README.en.md)** ｜ **[简体中文](README.md)** (the page UI also ships `ja` / `ko` / `fr`, switch in the top-right corner) |
+| Check your doc edits | `python3 tools/check_docs.py` (rc=0 = links resolve · language pairs present · no cross-project leftovers) |
+
 ## Run it in 30 seconds
 
 ```bash

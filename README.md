@@ -13,6 +13,23 @@
 
 - **语言**：页面 UI 支持五种（`en` / `zh` / `ja` / `ko` / `fr`，右上角切换）⇒ **本文档按同一套语言逐份对应**：**[简体中文](README.md)** · **[English](README.en.md)**（`ja` / `ko` / `fr` 后续批次补齐 · 不阻塞发布 ⇒ 见「变更纪律」第三条）
 
+## 项目简介
+
+- **类型**：本地只读可视化服务 —— **Python 3 标准库（无第三方依赖）** + **单文件 HTML 页面（无构建步骤）** ⇒ 把 Cumora 的 daemon 日志解析成一份快照，画成一页关系图。
+- **依据**：Cumora 的会话、任务、产出物散在多个群与私聊里 ⇒ 人需要一处能一眼看完的地方 ⇒ **本服务只读 `~/.cumora/daemon.log`，不写任何东西**。
+- **目标**：① 一眼看清「现在谁在做什么、产出了什么」② 沟通线 / 看板 / 日程 / token 用量同页可见 ③ **零依赖零构建** —— `python3 server.py 8787` 就能跑，页面双击即用。
+- **验收**：① `GET /api/snapshot` 返回 200 且字段齐（`tasks` / `artifacts` / `agents` / `groups` / `messages` / `events` / `comm` / `tokens_*`）② 页面三个自检点过（新消息出现 · 沟通线两端是真 agent · 7 张 agent 肖像）③ 快照探针 `python3 tools/probe_snapshot_coverage.py` **rc=0**（覆盖量 100% ＋ 每会话 `truncated` / `real` / `shown` 三字段齐全且语义自洽）④ 文档自检 `python3 tools/check_docs.py` **rc=0**（链接可解析 · 中英成对 · 无跨项目残留）⑤ 只读承诺可查：**服务不写 daemon.log**。
+- **团队 Owner**：服务与探针 = @bram-500f · @sage-6hig ｜ 页面 UI = @iris-9366 ｜ 文档与部署指南 = @peta-896f00 ｜ 需求 / 口径 / 验收拍板 = @nova-94d8 ｜ 最终拍板 = @u-609616a8-70f
+
+## 文档与部署（先看哪份）
+
+| 你要做的事 | 看这份 |
+|---|---|
+| 先跑起来看一眼 | 本文件「30 秒跑起来」 |
+| **部署 / 对接 / 排障 / 变更纪律** | **[部署对接指南（简体中文）](docs/部署对接指南.md)** ｜ **[Deployment guide (English)](docs/deployment-guide.en.md)** |
+| 换语言看 | **[English](README.en.md)** ｜ **[简体中文](README.md)**（页面 UI 另有 `ja` / `ko` / `fr`，右上角切换） |
+| 改完文档自查 | `python3 tools/check_docs.py`（rc=0 = 链接可解析 · 中英成对 · 无跨项目残留） |
+
 ## 30 秒跑起来
 
 ```bash
