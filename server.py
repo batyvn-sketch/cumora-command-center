@@ -236,7 +236,14 @@ def iso_ts(iso):
 # 正文多经 --file（正文不在日志），日志只留 sent(m-…, seq N)。故消息/提及一律换源到 CLI 结构化真身。
 CONVO_FALLBACK = ("g-e24ceb6d", "g-c4463f63", "g-ec7538ec", "g-5b78687a")
 REAL_TTL = 20.0                 # 真消息缓存秒数（略大于前端 15s 轮询，减少冷刷子进程抖动）
-REAL_TAIL = 60                  # 每会话取最近 N 条
+# ★ 2026-10-22 Bram（card-e9e8bdf4-c09 · @sage-6hig 04:5xZ 订正归因 + @nova-94d8 05:0xZ 裁）：
+#   **可见窗口被"条数上限"挤短，不是 tailer 丢**（消息列表走 `cumora messages --tail N`，
+#   tailer 只喂日志侧的事件/产出物/token）⇒ 旧值 N=60 ⇒ 繁忙会话 4h 内的 122 条只剩 60 条
+#   ⇒ 最早消息只剩 ~1h55m 前 ⇒ **广告写着 4h、实际给 1h55m**（= 静默骗人）。
+#   ⇒ 现在 N=500（覆盖 4h 窗口；`--tail` 取不到更多时由下面的 4h 过滤兜底），
+#     并把**实际覆盖时长**如实报出去（snapshot 的 msg_window_h / msg_tail_hit）⇒
+#     窗口被上限挤短时前端能显示真实值，而不是继续宣称 4h。
+REAL_TAIL = int(os.environ.get("CC_MSG_TAIL", "500"))   # 每会话取最近 N 条
 _real_cache = {"t": 0.0, "data": None}
 MSG_LINE_RE = re.compile(r'^\s*\[(m-[0-9a-f-]+)\]\s*\[\s*(\d{1,2}):(\d{2})\s*(AM|PM)\]\s+([A-Za-z0-9_-]+)\s*#\s*(\d+)\s+(.*)$')
 
@@ -258,13 +265,18 @@ def _active_convos():
     return list(found.keys()) or list(CONVO_FALLBACK)
 
 def _fetch_convo(cid):
-    """拉单个会话的最近消息文本（CLI 结构化真身）；任何失败都返回空串，不抛。"""
+    """拉单个会话的最近消息文本（CLI 结构化真身）；任何失败都返回空串，不抛。
+
+    返回 (cid, 文本, 拉到的行数) ⇒ 行数用于判**条数上限有没有顶到**
+    （顶到 = 这个会话的可见窗口被上限挤短 ⇒ 要如实报出来，不能继续宣称 4h）。
+    """
     try:
         r = subprocess.run(["cumora", "messages", cid, "--tail", str(REAL_TAIL)],
                            capture_output=True, text=True, timeout=10)
-        return cid, (r.stdout or "")
+        _txt = r.stdout or ""
+        return cid, _txt, len(_txt.splitlines())
     except Exception:
-        return cid, ""
+        return cid, "", 0
 
 def load_real():
     """真实群消息 → messages / comm / boss_mentions（TTL 缓存；失败回退上次好数据）。
@@ -281,9 +293,11 @@ def load_real():
             outs = list(ex.map(_fetch_convo, convos))
     except Exception:
         outs = [_fetch_convo(c) for c in convos]
+    # 条数上限有没有顶到（顶到 ⇒ 该会话的可见窗口被上限挤短 ⇒ 如实报，不装作 4h）
+    _tail_hit = any(n >= REAL_TAIL for (_c, _t, n) in outs)
 
     msgs, comm, boss = [], [], []
-    for cid, out in outs:
+    for cid, out, _nlines in outs:
         g = gshort(cid)
         rows = []
         for line in (out or "").splitlines():
@@ -332,7 +346,13 @@ def load_real():
             if a != "you" and re.search(r'@you\b|@u-[a-f0-9]+|\bbatyvn\b', txt):
                 boss.append({"from": a, "t": hm, "ts": ts})
     msgs.sort(key=lambda x: x["ts"])
-    data = {"messages": msgs[-MAX_MSG:], "comm": comm, "boss_mentions": boss}
+    # 实际覆盖时长（窗口内最早一条到现在）⇒ 前端据此显示真实窗口，别只宣称 window_h
+    _span_h = 0.0
+    if msgs:
+        _span_h = max(0.0, (now - min(m["ts"] for m in msgs)) / 3600.0)
+    data = {"messages": msgs[-MAX_MSG:], "comm": comm, "boss_mentions": boss,
+            "msg_window_h": round(_span_h, 3), "msg_tail_cap": REAL_TAIL,
+            "msg_tail_hit": bool(_tail_hit)}
     _real_cache["t"] = now
     _real_cache["data"] = data
     return data
@@ -651,6 +671,10 @@ def snapshot():
     return {
         "generated_at": int(time.time() * 1000),
         "window_h": 4,
+        # ★ 实际可见窗口（小时）＋ 条数上限状态 ⇒ 广告 4h 与实际给多少**都如实报**
+        "msg_window_h": rl.get("msg_window_h", 0.0),
+        "msg_tail_cap": rl.get("msg_tail_cap", REAL_TAIL),
+        "msg_tail_hit": rl.get("msg_tail_hit", False),
         "running_tasks": len(running), "done_tasks": len(done),
         "tasks": tasks[:MAX_TASK],
         "messages": msgs,
