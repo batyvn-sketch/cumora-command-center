@@ -21,19 +21,19 @@ python3 server.py 8787
 # 浏览器打开 http://127.0.0.1:8787/
 ```
 
-首启 macOS 会拦一次（Gatekeeper）→ 点「仍要打开」。页面如果看着像旧版 ⇒ **硬刷**（Cmd+Shift+R），缓存会把旧版留住。
+**双击打开打包的 `.app`** 时 macOS 会拦一次（Gatekeeper）→ 点「仍要打开」；**用 `python3 server.py` 跑脚本不会被拦**（仓库里的文件没有隔离属性）。页面如果看着像旧版 ⇒ **硬刷**（Cmd+Shift+R），缓存会把旧版留住。
 
 ## 环境变量
 
 | 变量 | 作用 | 默认 |
 |---|---|---|
 | `CC_PORT` | 监听端口 | `8787`（也可用 `python3 server.py <port>`） |
-| `CC_LOG` | daemon 日志路径 | `~/.cumora/daemon.log` |
+| `CUMORA_LOG` | daemon 日志路径 | `~/.cumora/daemon.log` |
 | `CC_HTML` | 指定页面文件 | 同目录 `Cumora指挥中心.html`（也认 `index.html`） |
 
 ## 怎么确认它真的在跑（三个自检点）
 
-1. **今日消息条数会随群里说话变** —— 在任意群里发一句，刷新后条数应 +1
+1. **新消息会出现在消息流里** —— 在任意群里发一句并刷新：它出现在流的最前面（**顶部「今日消息」计数是 4 小时窗口内的条数，不保证每次 +1** —— 实测：新消息出现了而计数没动 ⇒ **别拿计数当自检**）
 2. **沟通线的两端是真 agent** —— 不是占位圆点
 3. **agent 肖像 7 张** —— 对应 nina / nova / iris / atlas / sage / bram / peta
 

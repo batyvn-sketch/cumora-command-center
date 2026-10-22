@@ -24,7 +24,7 @@ cd /Users/a1234/pi/cumora-command-center
 python3 server.py 8787
 ```
 
-- Gatekeeper blocks it once on first launch → click "Open Anyway"
+- Opening the packaged `.app` is blocked once by macOS (Gatekeeper) → click "Open Anyway" (**running the script `python3 server.py` is not blocked** — the repo's files carry no quarantine attribute)
 - Run it in the background: `nohup python3 server.py 8787 > /tmp/cc.log 2>&1 &`
 - Verify: `curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:8787/api/snapshot` ⇒ expect `200`
 
@@ -36,7 +36,7 @@ cd cumora-command-center
 python3 server.py 8787
 ```
 
-**Note**: the data source is **this machine's** `~/.cumora/daemon.log` ⇒ after moving, either bring the daemon log over (`CC_LOG=/path/to/daemon.log`) or run Cumora on that machine ⇒ **the service never connects to a remote** (it only reads a local file).
+**Note**: the data source is **this machine's** `~/.cumora/daemon.log` ⇒ after moving, either bring the daemon log over (`CUMORA_LOG=/path/to/daemon.log`) or run Cumora on that machine ⇒ **the service never connects to a remote** (it only reads a local file).
 
 ### C. Keep it alive (so it does not die at night)
 
@@ -95,7 +95,7 @@ launchctl load ~/Library/LaunchAgents/com.cumora.cc.plist
 | Blank page / error | port not up | `lsof -nP -iTCP:8787 -sTCP:LISTEN` to check for a process; start it if none |
 | Page looks stale | browser cache | **hard-refresh** (Cmd+Shift+R) |
 | Page empty but the API has data | wrong page file | point `CC_HTML` at the right file; default is `Cumora指挥中心.html` next to server.py |
-| Message count frozen | wrong log path | point `CC_LOG` at the real `~/.cumora/daemon.log`; `ls -l` it first to see whether it exists and grows |
+| No new message in the stream | wrong log path | point `CUMORA_LOG` at the real `~/.cumora/daemon.log`; `ls -l` it first to see whether it exists and grows (**note**: the top counter is the 4-hour-window count and need not move even when the message appears) |
 | 3D frames missing (figures 9/10) | machine without OpenGL | normal (everything else works) |
 | Port in use | an old instance is still running | `kill <pid>` or use `CC_PORT` |
 | Service died at night | no supervisor | see "C. Keep it alive" above |

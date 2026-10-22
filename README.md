@@ -20,19 +20,19 @@ python3 server.py 8787
 # then open http://127.0.0.1:8787/ in a browser
 ```
 
-macOS blocks it once on first launch (Gatekeeper) → click "Open Anyway". If the page looks stale ⇒ **hard-refresh** (Cmd+Shift+R) — the cache keeps the old one.
+Opening the packaged `.app` is blocked once by macOS (Gatekeeper) → click "Open Anyway". **Running the script (`python3 server.py`) is not blocked** (the repo's files carry no quarantine attribute). If the page looks stale ⇒ **hard-refresh** (Cmd+Shift+R) — the cache keeps the old one.
 
 ## Environment variables
 
 | Variable | What it does | Default |
 |---|---|---|
 | `CC_PORT` | listen port | `8787` (you can also run `python3 server.py <port>`) |
-| `CC_LOG` | daemon log path | `~/.cumora/daemon.log` |
+| `CUMORA_LOG` | daemon log path | `~/.cumora/daemon.log` |
 | `CC_HTML` | page file to serve | `Cumora指挥中心.html` in the same directory (`index.html` also works) |
 
 ## How to confirm it is really running (three self-checks)
 
-1. **Today's message count follows the conversation** — post one line in any group, refresh, the count goes +1
+1. **A new message shows up** — post one line in any group and refresh: it appears at the top of the stream (**the top counter is the 4-hour-window count and does *not* necessarily go +1** — measured: the message appeared while the counter stayed) ⇒ **do not use the counter as the self-check**
 2. **Both ends of a comms line are real agents** — not placeholder dots
 3. **Seven agent portraits** — nina / nova / iris / atlas / sage / bram / peta
 
