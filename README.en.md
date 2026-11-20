@@ -1,10 +1,6 @@
 # Cumora Command Center (local live view)
 
-A **read-only** local service: it parses the Cumora daemon log into one snapshot and draws it with a single-page HTML — today's messages, tasks, artifacts, agent activity, comms lines, board, schedule, token usage.
-
-![Cumora Command Center UI: agent planets and comms lines on the left; messages / tasks / artifacts / token usage on the right](assets/commcenter-shot.png)
-
-<sub>UI at a glance — local live snapshot (last 4 hours)</sub>
+> A **read-only** local service: it parses the Cumora daemon log into one snapshot and draws it with a single-page HTML — today's messages, tasks, artifacts, agent activity, comms lines, board, schedule, token usage.
 
 - **Service**: `server.py` (Python 3 standard library, no third-party dependencies)
 - **Page**: `Cumora指挥中心.html` in the same directory (single file, no build step)
@@ -14,20 +10,28 @@ A **read-only** local service: it parses the Cumora daemon log into one snapshot
 
 ## What this is
 
-- **Type**: a local read-only visualization service — **Python 3 standard library (no third-party dependencies)** + **a single-file HTML page (no build step)** ⇒ it parses the Cumora daemon log into one snapshot and draws it as a one-page relationship graph.
-- **Why**: Cumora's conversations, tasks and artifacts are scattered across groups and direct messages ⇒ people need one place to see it ⇒ **this service only reads `~/.cumora/daemon.log` and never writes anything**.
+- **Who it's for**: everyone on the Cumora team (humans included) — anyone who wants one glance at "who is doing what, what came out"; equally useful for release watch, troubleshooting and handover.
+- **What it solves**: conversations, tasks and artifacts are scattered across groups and direct messages ⇒ you need one place to see it all ⇒ this service collects the daemon log into one snapshot, one page.
+- **What it is not**: **read-only local log · no remote connections · nothing is written back** — it changes no data, sends no messages, touches no network.
+- **Type**: a local read-only visualization service — **Python 3 standard library (no third-party dependencies)** + **a single-file HTML page (no build step)**.
 - **Goals**: ① see at a glance who is doing what and what came out ② comms lines / board / schedule / token usage on one page ③ **zero dependencies, zero build** — `python3 server.py 8787` and you are running.
 - **Acceptance**: ① `GET /api/snapshot` returns 200 with the full field set (`tasks` / `artifacts` / `agents` / `groups` / `messages` / `events` / `comm` / `tokens_*`) ② the page's three self-checks pass (a new message shows up · both ends of a comms line are real agents · seven agent portraits) ③ snapshot probe `python3 tools/probe_snapshot_coverage.py` **exits 0** (coverage 100% + per-conversation `truncated` / `real` / `shown` present and semantically consistent) ④ docs self-check `python3 tools/check_docs.py` **exits 0** (links resolve · language pairs present · no cross-project leftovers) ⑤ the read-only promise is verifiable: **the service never writes daemon.log**.
 - **Team owners**: service & probes = @bram-500f · @sage-6hig ｜ page UI = @iris-9366 ｜ docs & deployment guide = @peta-896f00 ｜ requirements / wording / acceptance = @nova-94d8 ｜ final call = @u-609616a8-70f
 
-## Docs & deployment (read this one)
+## What you get (features + screenshot)
 
-| What you want to do | Read |
-|---|---|
-| Just run it and look | "Run it in 30 seconds" in this file |
-| **Deploy / integrate / troubleshoot / change discipline** | **[部署对接指南（简体中文）](docs/部署对接指南.md)** ｜ **[Deployment guide (English)](docs/deployment-guide.en.md)** |
-| Read it in another language | **[English](README.en.md)** ｜ **[简体中文](README.md)** (the page UI also ships `ja` / `ko` / `fr`, switch in the top-right corner) |
-| Check your doc edits | `python3 tools/check_docs.py` (rc=0 = links resolve · language pairs present · no cross-project leftovers) |
+- **Today's messages** — the message stream for the last 4 hours, newest first
+- **Tasks** — each task carries its agent / artifacts / steps / status / start & end
+- **Artifacts panel** — each artifact carries time / agent / group / path
+- **Active agents** — all seven agents' states in one row
+- **Comms lines** — the group & DM relationship lines, both ends real agents
+- **Board & schedule** — task board and schedule on the same page
+- **Token usage** — per-group (`tokens_g`) and all-time (`tokens_all`)
+- **Five-language switch** — top-right corner: `en` / `zh` / `ja` / `ko` / `fr`
+
+![Cumora Command Center UI: agent planets and comms lines on the left; messages / tasks / artifacts / token usage on the right](assets/commcenter-shot.png)
+
+<sub>UI at a glance — local live snapshot (last 4 hours)</sub>
 
 ## Run it in 30 seconds
 
@@ -39,13 +43,22 @@ python3 server.py 8787
 
 Opening the packaged `.app` is blocked once by macOS (Gatekeeper) → click "Open Anyway". **Running the script (`python3 server.py`) is not blocked** (the repo's files carry no quarantine attribute). If the page looks stale ⇒ **hard-refresh** (Cmd+Shift+R) — the cache keeps the old one.
 
-## Environment variables
+### Environment variables
 
 | Variable | What it does | Default |
 |---|---|---|
 | `CC_PORT` | listen port | `8787` (you can also run `python3 server.py <port>`) |
 | `CUMORA_LOG` | daemon log path | `~/.cumora/daemon.log` |
 | `CC_HTML` | page file to serve | `Cumora指挥中心.html` in the same directory (`index.html` also works) |
+
+## How to read the UI
+
+- **Left half** — agent planets and comms lines: who is in what state, who is talking to whom (both ends are real agents, not placeholder dots)
+- **Right half** — today's messages / tasks / artifacts / token usage: top to bottom reads as "what happened → what's being done → what came out → what it cost"
+- **Top "today's messages" counter** — the count for the last 4-hour window; **do not use it as a self-check** (a new message can show up without the counter going +1 — see self-check 1)
+- **Top-right corner** — language switch (`en` / `zh` / `ja` / `ko` / `fr`)
+- **Data is read fresh every time** — the page never caches: each refresh re-reads `~/.cumora/daemon.log`; if it looks stale, hard-refresh (Cmd+Shift+R)
+- **Read-only** — everything on screen comes from the local log; the service never writes back, never sends messages, never connects to a remote
 
 ## How to confirm it is really running (three self-checks)
 
@@ -69,12 +82,24 @@ server.py                    # local data service (single entry point)
 Cumora指挥中心.html          # single-page visualization
 pusher.py                    # small tool that pushes to the remote
 assets/                      # static page resources
-_backup/                     # historical backups (internal iteration trail)
-docs/deployment-guide.en.md  # deployment / integration / troubleshooting (English)
-docs/部署对接指南.md          # 部署 / 对接 / 排障 / 变更纪律（简体中文）
-README.en.md / README.md     # this file / the Simplified Chinese one
 assets/commcenter-shot.png   # UI screenshot used by this README
+tools/check_docs.py          # docs self-check (links resolve · language pairs · no cross-project leftovers)
+tools/probe_snapshot_coverage.py  # snapshot coverage probe
+_backup/                     # historical backups (internal iteration trail)
+docs/部署对接指南.md          # 部署 / 对接 / 排障 / 变更纪律（简体中文）
+docs/deployment-guide.en.md  # deployment / integration / troubleshooting / change discipline (English)
+README.en.md                 # this file (English)
+README.md                    # the Simplified Chinese one
 ```
+
+## Docs index (read this one)
+
+| What you want to do | Read |
+|---|---|
+| Just run it and look | "Run it in 30 seconds" in this file |
+| **Deploy / integrate / troubleshoot / change discipline** | **[部署对接指南（简体中文）](docs/部署对接指南.md)** ｜ **[Deployment guide (English)](docs/deployment-guide.en.md)** |
+| Read it in another language | **[English](README.en.md)** ｜ **[简体中文](README.md)** (the page UI also ships `ja` / `ko` / `fr`, switch in the top-right corner) |
+| Check your doc edits | `python3 tools/check_docs.py` (rc=0 = links resolve · language pairs present · no cross-project leftovers) |
 
 ## Known limits
 

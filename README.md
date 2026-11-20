@@ -1,34 +1,37 @@
 # Cumora 指挥中心（本地实时可视化）
 
-一个**只读**的本地服务：把 Cumora 的 daemon 日志解析成一份快照，用一个单页 HTML 画出来 —— 今日消息、任务、产出物、agent 活跃、沟通线、看板、日程、token 用量。
-
-![Cumora 指挥中心界面：左侧 agent 星球与沟通线，右侧今日消息 / 任务 / 产出物 / token 用量](assets/commcenter-shot.png)
-
-<sub>界面一览 —— 本地实时快照（最近 4 小时窗口）</sub>
+> 一个**只读**的本地服务：把 Cumora 的 daemon 日志解析成一份快照，用一个单页 HTML 画出来 —— 今日消息、任务、产出物、agent 活跃、沟通线、看板、日程、token 用量。
 
 - **服务**：`server.py`（Python 3 标准库，无第三方依赖）
 - **页面**：同目录 `Cumora指挥中心.html`（单文件，无构建步骤）
 - **数据源**：`~/.cumora/daemon.log`（只读；服务不写任何东西）
 - **默认端口**：`8787`
-
 - **语言**：页面 UI 支持五种（`en` / `zh` / `ja` / `ko` / `fr`，右上角切换）⇒ **本文档按同一套语言逐份对应**：**[简体中文](README.md)** · **[English](README.en.md)**（`ja` / `ko` / `fr` 后续批次补齐 · 不阻塞发布 ⇒ 见「变更纪律」第三条）
 
 ## 项目简介
 
-- **类型**：本地只读可视化服务 —— **Python 3 标准库（无第三方依赖）** + **单文件 HTML 页面（无构建步骤）** ⇒ 把 Cumora 的 daemon 日志解析成一份快照，画成一页关系图。
-- **依据**：Cumora 的会话、任务、产出物散在多个群与私聊里 ⇒ 人需要一处能一眼看完的地方 ⇒ **本服务只读 `~/.cumora/daemon.log`，不写任何东西**。
+- **为谁**：Cumora 团队的每个人（含 human）—— 想一眼看清「现在谁在做什么、产出了什么」的人；发布盯盘、排障、交接时同样用它。
+- **解决什么**：会话、任务、产出物散在多个群与私聊里 ⇒ 需要一处能一眼看完的地方 ⇒ 本服务把 daemon 日志聚成一份快照，一页看完。
+- **不是什么**：**只读本地日志 · 不连远端 · 不写回** —— 不改数据、不发消息、不访问网络。
+- **类型**：本地只读可视化服务 —— **Python 3 标准库（无第三方依赖）** + **单文件 HTML 页面（无构建步骤）**。
 - **目标**：① 一眼看清「现在谁在做什么、产出了什么」② 沟通线 / 看板 / 日程 / token 用量同页可见 ③ **零依赖零构建** —— `python3 server.py 8787` 就能跑，页面双击即用。
 - **验收**：① `GET /api/snapshot` 返回 200 且字段齐（`tasks` / `artifacts` / `agents` / `groups` / `messages` / `events` / `comm` / `tokens_*`）② 页面三个自检点过（新消息出现 · 沟通线两端是真 agent · 7 张 agent 肖像）③ 快照探针 `python3 tools/probe_snapshot_coverage.py` **rc=0**（覆盖量 100% ＋ 每会话 `truncated` / `real` / `shown` 三字段齐全且语义自洽）④ 文档自检 `python3 tools/check_docs.py` **rc=0**（链接可解析 · 中英成对 · 无跨项目残留）⑤ 只读承诺可查：**服务不写 daemon.log**。
 - **团队 Owner**：服务与探针 = @bram-500f · @sage-6hig ｜ 页面 UI = @iris-9366 ｜ 文档与部署指南 = @peta-896f00 ｜ 需求 / 口径 / 验收拍板 = @nova-94d8 ｜ 最终拍板 = @u-609616a8-70f
 
-## 文档与部署（先看哪份）
+## 它给你什么（能力清单 + 截图）
 
-| 你要做的事 | 看这份 |
-|---|---|
-| 先跑起来看一眼 | 本文件「30 秒跑起来」 |
-| **部署 / 对接 / 排障 / 变更纪律** | **[部署对接指南（简体中文）](docs/部署对接指南.md)** ｜ **[Deployment guide (English)](docs/deployment-guide.en.md)** |
-| 换语言看 | **[English](README.en.md)** ｜ **[简体中文](README.md)**（页面 UI 另有 `ja` / `ko` / `fr`，右上角切换） |
-| 改完文档自查 | `python3 tools/check_docs.py`（rc=0 = 链接可解析 · 中英成对 · 无跨项目残留） |
+- **今日消息** —— 最近 4 小时窗口的消息流，最新在最前
+- **任务** —— 每条任务带 agent / 产出物 / 步骤 / 状态 / 起止时间
+- **产出物面板** —— 每件产出带时间 / agent / 群 / 路径
+- **agent 活跃** —— 7 个 agent 的状态一排看全
+- **沟通线** —— 群与私聊的关系线，两端是真 agent
+- **看板 · 日程** —— 任务看板与日程同页可见
+- **token 用量** —— 分组（`tokens_g`）与全量累计（`tokens_all`）
+- **五语言切换** —— 右上角 `en` / `zh` / `ja` / `ko` / `fr`
+
+![Cumora 指挥中心界面：左侧 agent 星球与沟通线，右侧今日消息 / 任务 / 产出物 / token 用量](assets/commcenter-shot.png)
+
+<sub>界面一览 —— 本地实时快照（最近 4 小时窗口）</sub>
 
 ## 30 秒跑起来
 
@@ -40,13 +43,22 @@ python3 server.py 8787
 
 **双击打开打包的 `.app`** 时 macOS 会拦一次（Gatekeeper）→ 点「仍要打开」；**用 `python3 server.py` 跑脚本不会被拦**（仓库里的文件没有隔离属性）。页面如果看着像旧版 ⇒ **硬刷**（Cmd+Shift+R），缓存会把旧版留住。
 
-## 环境变量
+### 环境变量
 
 | 变量 | 作用 | 默认 |
 |---|---|---|
 | `CC_PORT` | 监听端口 | `8787`（也可用 `python3 server.py <port>`） |
 | `CUMORA_LOG` | daemon 日志路径 | `~/.cumora/daemon.log` |
 | `CC_HTML` | 指定页面文件 | 同目录 `Cumora指挥中心.html`（也认 `index.html`） |
+
+## 界面怎么看
+
+- **左半屏** —— agent 星球与沟通线：谁在什么状态、谁和谁在聊（两端是真 agent，不是占位圆点）
+- **右半屏** —— 今日消息 / 任务 / 产出物 / token 用量：从上到下就是「发生了什么 → 在做什么 → 做出了什么 → 花了多少」
+- **顶部「今日消息」计数** —— 最近 4 小时窗口的条数；**别拿它当自检**（消息进来了计数不一定 +1，见「三个自检」第 1 条）
+- **右上角** —— 语言切换（`en` / `zh` / `ja` / `ko` / `fr`）
+- **数据每次都现读** —— 页面不缓存：刷新即重读 `~/.cumora/daemon.log`；看着像旧版就硬刷（Cmd+Shift+R）
+- **只读** —— 页面上看到的一切都来自本地日志，服务不回写、不发消息、不连远端
 
 ## 怎么确认它真的在跑（三个自检点）
 
@@ -70,12 +82,24 @@ server.py                    # 本地数据服务（唯一入口）
 Cumora指挥中心.html          # 单页可视化
 pusher.py                    # 推送到远端的小工具
 assets/                      # 页面静态资源
+assets/commcenter-shot.png   # 界面截图（README 用）
+tools/check_docs.py          # 文档自检（链接可解析 · 中英成对 · 无跨项目残留）
+tools/probe_snapshot_coverage.py  # 快照覆盖量探针
 _backup/                     # 历史版本备份（内部迭代留痕）
 docs/部署对接指南.md          # 部署 / 对接 / 排障 / 变更纪律（简体中文）
 docs/deployment-guide.en.md  # 部署 / 对接 / 排障 / 变更纪律（English）
 README.md                    # 本文件（简体中文）
-assets/commcenter-shot.png   # 界面截图（README 用）
+README.en.md                 # 英文版
 ```
+
+## 文档索引（先看哪份）
+
+| 你要做的事 | 看这份 |
+|---|---|
+| 先跑起来看一眼 | 本文件「30 秒跑起来」 |
+| **部署 / 对接 / 排障 / 变更纪律** | **[部署对接指南（简体中文）](docs/部署对接指南.md)** ｜ **[Deployment guide (English)](docs/deployment-guide.en.md)** |
+| 换语言看 | **[English](README.en.md)** ｜ **[简体中文](README.md)**（页面 UI 另有 `ja` / `ko` / `fr`，右上角切换） |
+| 改完文档自查 | `python3 tools/check_docs.py`（rc=0 = 链接可解析 · 中英成对 · 无跨项目残留） |
 
 ## 已知限制
 
