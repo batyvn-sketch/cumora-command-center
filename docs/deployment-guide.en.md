@@ -96,7 +96,6 @@ launchctl load ~/Library/LaunchAgents/com.cumora.cc.plist
 | Page looks stale | browser cache | **hard-refresh** (Cmd+Shift+R) |
 | Page empty but the API has data | wrong page file | point `CC_HTML` at the right file; default is `Cumora指挥中心.html` next to server.py |
 | No new message in the stream | wrong log path | point `CUMORA_LOG` at the real `~/.cumora/daemon.log`; `ls -l` it first to see whether it exists and grows (**note**: the top counter is the 4-hour-window count and need not move even when the message appears) |
-| 3D frames missing (figures 9/10) | machine without OpenGL | normal (everything else works) |
 | Port in use | an old instance is still running | `kill <pid>` or use `CC_PORT` |
 | Service died at night | no supervisor | see "C. Keep it alive" above |
 

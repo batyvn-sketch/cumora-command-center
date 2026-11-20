@@ -105,7 +105,6 @@ README.md                    # the Simplified Chinese one
 
 - **No process supervisor** — nobody notices if the service dies (add a launchd / cron autostart yourself)
 - **A busy port makes it fail to start** — check `lsof -nP -iTCP:8787 -sTCP:LISTEN` first
-- **3D frames are skipped on machines without OpenGL** — figures 9/10 lose their 3D part, the rest is fine
 - **The page never caches data** — every refresh re-reads daemon.log
 
 ## Change discipline (three rules, each from a real bug)
