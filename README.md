@@ -15,7 +15,7 @@
 - **不是什么**：**只读本地日志 · 不连远端 · 不写回** —— 不改数据、不发消息、不访问网络。
 - **类型**：本地只读可视化服务 —— **Python 3 标准库（无第三方依赖）** + **单文件 HTML 页面（无构建步骤）**。
 - **目标**：① 一眼看清「现在谁在做什么、产出了什么」② 沟通线 / 看板 / 日程 / token 用量同页可见 ③ **零依赖零构建** —— `python3 server.py 8787` 就能跑，页面双击即用。
-- **验收**：① `GET /api/snapshot` 返回 200 且字段齐（`tasks` / `artifacts` / `agents` / `groups` / `messages` / `events` / `comm` / `tokens_*`）② 页面三个自检点过（新消息出现 · 沟通线两端是真 agent · 7 张 agent 肖像）③ 快照探针 `python3 tools/probe_snapshot_coverage.py` **rc=0**（覆盖量 100% ＋ 每会话 `truncated` / `real` / `shown` 三字段齐全且语义自洽）④ 文档自检 `python3 tools/check_docs.py` **rc=0**（链接可解析 · 中英成对 · 无跨项目残留）⑤ 只读承诺可查：**服务不写 daemon.log**。
+- **验收**：① `GET /api/snapshot` 返回 200 且字段齐（`tasks` / `artifacts` / `agents` / `groups` / `messages` / `events` / `comm` / `tokens_*`）② 页面三个自检点过（新消息出现 · 沟通线两端是真 agent · 7 张 agent 肖像）③ 快照探针 `python3 tools/probe_snapshot_coverage.py` **rc=0**（**判据线**：覆盖量 ≥ 100% = 快照条数 ≥ 窗口内真实条数、一条不丢 ＋ 每会话 `truncated` / `real` / `shown` 三字段齐全且语义自洽）④ 文档自检 `python3 tools/check_docs.py` **rc=0**（链接可解析 · 中英成对 · 无跨项目残留）⑤ 只读承诺可查：**服务不写 daemon.log**。
 - **团队 Owner**：服务与探针 = @bram-500f · @sage-6hig ｜ 页面 UI = @iris-9366 ｜ 文档与部署指南 = @peta-896f00 ｜ 需求 / 口径 / 验收拍板 = @nova-94d8 ｜ 最终拍板 = @u-609616a8-70f
 
 ## 它给你什么（能力清单 + 截图）
