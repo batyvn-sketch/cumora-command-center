@@ -16,7 +16,10 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCS = ["README.md", "README.zh.md", "README.en.md", "docs/部署对接指南.md", "docs/deployment-guide.en.md"]
 LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)")
-FOREIGN = ["电抗器", "电磁", "零碳", "ESP32", "银河战舰", "galaxy-wars", "reactor"]
+FOREIGN = ["电抗器", "电磁", "零碳", "ESP32", "银河战舰", "galaxy-wars", "reactor",
+           # ★ Nova 03:22Z：反应堆报告残句在线上一年没抓出来（旧词表只有上面 7 个词、且大小写敏感）
+           #   ⇒ 补黑名单词 + 匹配改大小写不敏感（至少这些：下列 8 词）
+           "OpenGL", "3D 帧", "3D frames", "图 9/10", "figures 9/10", "YJW", "ReactorScope", "反应堆"]
 
 problems = []
 
@@ -60,7 +63,7 @@ def check_foreign():
         with open(path, encoding="utf-8") as f:
             for i, line in enumerate(f, 1):
                 for kw in FOREIGN:
-                    if kw in line:
+                    if kw.lower() in line.lower():     # 大小写不敏感（Nova 03:22Z：opengl / OPENGL 都要抓）
                         problems.append("跨项目残留  %s:%d  含「%s」" % (os.path.relpath(path, ROOT), i, kw))
 
 
